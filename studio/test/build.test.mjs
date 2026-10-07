@@ -1,0 +1,34 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import {createHash} from 'node:crypto';
+import {safeInput,scriptJSON,prepareGeometry,buildHTML,importAtlas} from '../build.mjs';
+import {exampleAtlas} from '../example.mjs';
+test('inline data cannot terminate script tags',()=>{const value={x:'</script><img src=x onerror=alert(1)>\u2028'};const encoded=scriptJSON(value);assert(!encoded.includes('<'));assert.deepEqual(JSON.parse(encoded),value);});
+test('source traversal and absolute paths are refused',()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-path-'));try{fs.writeFileSync(path.join(root,'a.txt'),'safe');assert.equal(safeInput(root,'a.txt'),path.join(root,'a.txt'));for(const p of ['../escape','/etc/passwd','https://example.com','C:\\secret'])assert.throws(()=>safeInput(root,p));}finally{fs.rmSync(root,{recursive:true,force:true});}});
+test('routing is deterministic and every edge has finite geometry',()=>{const a=prepareGeometry(exampleAtlas()),b=prepareGeometry(exampleAtlas());assert.deepEqual(a,b);for(const r of a.routes)for(const e of r.edges){assert(e.d.startsWith('M'));assert(e.points.length>=2);assert(e.points.flat().every(Number.isFinite));assert(r.bounds.every(Number.isFinite));}});
+test('portable document root contains the license for browser re-export',()=>{const result=buildHTML(exampleAtlas());const root=result.slice(result.indexOf('<html'));assert(root.includes('Permission is hereby granted'));assert(root.includes('Copyright (c) 2026 tt-a1i'));});
+test('malformed and extreme edge waypoints fail before routing',()=>{for(const via of [[['garbage',100]],[[1e200,100]],[[1,2,3]]]){const data=exampleAtlas();data.routes[0].edges[0].via=via;assert.throws(()=>prepareGeometry(data));}});
+function cleanup(root){assert.equal(path.dirname(path.resolve(root)),path.resolve(os.tmpdir()));assert(path.basename(root).startsWith('studio-'));fs.rmSync(root,{recursive:true,force:true});}
+test('atlas import binds indexed references, verifies hashes and preserves explicit routing',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-import-'));
+  try{
+    const model=exampleAtlas(),r=model.routes[0],raw='source.txt';
+    const contents=model.sources[0].text;fs.writeFileSync(path.join(root,raw),contents);
+    const sha256=createHash('sha256').update(contents).digest('hex');
+    const source={...model.sources[0],raw,href:'source.html',sha256};
+    const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height]})),connections:r.edges.map(e=>({...e,route:'auto'}))};
+    fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
+    const input={routes:[{...r,candidate:'candidate.json'}],sources:[source],terms:[{term:'TEST_TERM',references:[{href:'source.html#L3',path:source.path,line:3,scope:source.scope}]}]};
+    fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify(input));
+    const imported=importAtlas(root);assert.equal(imported.terms[0].references[0].source,source.id);assert.equal(imported.terms[0].references[0].line,3);assert.equal(imported.routes[0].edges[0].route,'auto');assert(buildHTML(imported).includes('TEST_TERM'));
+    candidate.connections[0].to='unknown';fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));assert.throws(()=>importAtlas(root),/topology/);
+    fs.writeFileSync(path.join(root,raw),'changed');assert.throws(()=>importAtlas(root),/hash mismatch/);
+  }finally{cleanup(root);}
+});
+test('an external directory link cannot expose files outside an atlas',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-link-')),outside=fs.mkdtempSync(path.join(os.tmpdir(),'studio-outside-'));
+  try{fs.writeFileSync(path.join(outside,'secret.txt'),'outside');fs.symlinkSync(outside,path.join(root,'linked'),process.platform==='win32'?'junction':'dir');assert.throws(()=>safeInput(root,'linked/secret.txt'),/escapes/);}finally{cleanup(root);cleanup(outside);}
+});

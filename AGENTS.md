@@ -1,5 +1,18 @@
 # Agent instructions
 
+## Archify Studio derivative
+
+Studio is this repository's primary product; see README.md and studio/RUNBOOK.md.
+For Studio visual work, use `.agents/skills/archify-studio-design/SKILL.md` and
+`studio/DESIGN.md`. Studio implementation is in `studio/`; do not patch the
+generated HTML in `dist/` or change upstream engine behavior to restyle Studio.
+Run `npm run check` and `npm run build` from the repository root for Studio.
+Keep private evidence in ignored `.local/` or an explicitly chosen external
+output directory. Preserve upstream attribution and licenses. Commit, push,
+deployment and global skill installation require the user's authorization.
+
+The following inherited instructions still apply to upstream engine work.
+
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for repository changes and [REVIEWING.md](REVIEWING.md) for reviews.
 
 ## Live Archify installations

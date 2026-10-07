@@ -1,0 +1,14 @@
+{
+  "name": "archify-studio",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "An offline architecture and evidence workspace built on Archify.",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "build": "node studio/build.mjs",
+    "start": "node studio/serve.mjs",
+    "test": "node --test studio/test/*.test.mjs",
+    "check": "node --check studio/app.mjs && node --check studio/model.mjs && node --check studio/build.mjs && npm test"
+  }
+}

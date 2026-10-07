@@ -1,0 +1,23 @@
+name: Studio
+on:
+  push:
+    paths: ['studio/**', 'package.json', '.github/workflows/studio.yml']
+  pull_request:
+    paths: ['studio/**', 'package.json', '.github/workflows/studio.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  studio:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm run check
+      - run: npm run build

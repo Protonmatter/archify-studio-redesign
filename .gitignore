@@ -6,3 +6,9 @@ node_modules/
 /.impeccable/
 __pycache__/
 *.py[cod]
+
+# Archify Studio generated artifacts and private local research
+/dist/
+/.local/
+/work/
+/.superpowers/
