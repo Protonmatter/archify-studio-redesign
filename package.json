@@ -9,6 +9,9 @@
     "build": "node studio/build.mjs",
     "start": "node studio/serve.mjs",
     "test": "node --test studio/test/*.test.mjs",
-    "check": "node --check studio/app.mjs && node --check studio/model.mjs && node --check studio/build.mjs && npm test"
+    "check": "node --check studio/app.mjs && node --check studio/model.mjs && node --check studio/build.mjs && node --check studio/serve.mjs && npm test && npm run check:contracts",
+    "check:contracts": "node studio/check-contracts.mjs",
+    "check:python": "python -m compileall -q studio/tools && python -m unittest discover -s studio/tools -p test_*.py -v",
+    "check:all": "npm run check && npm run check:python"
   }
 }

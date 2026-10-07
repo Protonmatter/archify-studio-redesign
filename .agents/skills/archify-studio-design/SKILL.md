@@ -7,6 +7,8 @@ description: Design and review the Archify Studio diagram workspace, evidence in
 
 Read `studio/DESIGN.md` relative to the repository root before changing visible behavior. Apply this skill to Studio UI and diagram work; it does not govern unrelated repositories or authorize publication.
 
+For accessibility, export or notation/standards claims, also follow the repository's `archify-standards` skill and `studio/contracts/STANDARDS.md`. Visual quality and standards conformance require distinct evidence.
+
 ## The visual contract
 
 The diagram is the main artifact. Surround it with a quiet document workspace: warm paper, charcoal typography, muted teal selection, fine rules and deliberate whitespace. Amber and rust express unresolved and failed evidence. Use existing CSS variables for both Paper and Ink themes. No Tailwind or component-library dependency is needed.

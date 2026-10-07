@@ -32,3 +32,16 @@ test('an external directory link cannot expose files outside an atlas',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-link-')),outside=fs.mkdtempSync(path.join(os.tmpdir(),'studio-outside-'));
   try{fs.writeFileSync(path.join(outside,'secret.txt'),'outside');fs.symlinkSync(outside,path.join(root,'linked'),process.platform==='win32'?'junction':'dir');assert.throws(()=>safeInput(root,'linked/secret.txt'),/escapes/);}finally{cleanup(root);cleanup(outside);}
 });
+test('BOM-prefixed evidence survives import and source-download re-encoding exactly',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-bom-'));
+  try{
+    const model=exampleAtlas(),r=model.routes[0];const bytes=Buffer.from('\ufeff'+model.sources[0].text,'utf8');
+    fs.writeFileSync(path.join(root,'source.txt'),bytes);
+    const source={...model.sources[0],raw:'source.txt',href:'source.txt',sha256:createHash('sha256').update(bytes).digest('hex')};
+    const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height]})),connections:r.edges};
+    fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
+    fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify({routes:[{...r,candidate:'candidate.json'}],sources:[source],terms:[]}));
+    const imported=importAtlas(root).sources[0];const downloaded=Buffer.from(imported.text,'utf8');
+    assert.deepEqual(downloaded,bytes);assert.equal(createHash('sha256').update(downloaded).digest('hex'),source.sha256);
+  }finally{cleanup(root);}
+});

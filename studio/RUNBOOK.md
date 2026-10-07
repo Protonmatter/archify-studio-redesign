@@ -2,6 +2,8 @@
 
 Requires Node.js 22+ and a current browser. Studio adds no npm dependencies. The inherited Archify engine retains its separate package and commands.
 
+Python packaging additionally requires Python 3.11+. `npm run check:all` runs the Node and Python suites plus standards-registry integrity checks. See [the standards contract](contracts/STANDARDS.md), [Python packet contract](contracts/atlas-input-v1.md), and [RFC process](rfcs/TEMPLATE.md) for their exact scope.
+
 ```powershell
 npm run check
 npm run build

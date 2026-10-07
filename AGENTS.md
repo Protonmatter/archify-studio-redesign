@@ -11,6 +11,13 @@ Keep private evidence in ignored `.local/` or an explicitly chosen external
 output directory. Preserve upstream attribution and licenses. Commit, push,
 deployment and global skill installation require the user's authorization.
 
+For packet, Python, HTTP, accessibility, export, notation or standards-claim
+changes, use `.agents/skills/archify-standards/SKILL.md` and the scoped contract
+in `studio/contracts/STANDARDS.md`. Run `npm run check:all` for complete local
+Node/Python qualification. Do not equate registry checks or selected tests with
+full RFC/WCAG/SVG conformance. Public contract changes need an applicable
+internal RFC; routine contract-preserving fixes need focused regressions.
+
 The following inherited instructions still apply to upstream engine work.
 
 Follow [CONTRIBUTING.md](CONTRIBUTING.md) for repository changes and [REVIEWING.md](REVIEWING.md) for reviews.

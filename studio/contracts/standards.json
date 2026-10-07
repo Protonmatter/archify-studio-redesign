@@ -1,0 +1,16 @@
+{
+  "contract": "studio-standards-v1",
+  "reviewed": "2026-10-07",
+  "claim": "Scoped requirements; no blanket conformance certification",
+  "requirements": [
+    {"id":"JSON-01","reference":"https://www.rfc-editor.org/rfc/rfc8259","verification":"automatic","tests":["studio/test/standards.test.mjs","studio/tools/test_package_atlas.py"]},
+    {"id":"HTTP-01","reference":"https://www.rfc-editor.org/rfc/rfc9110.html","verification":"automatic","tests":["studio/test/standards.test.mjs"]},
+    {"id":"CACHE-01","reference":"https://www.rfc-editor.org/rfc/rfc9111.html","verification":"automatic","tests":["studio/test/standards.test.mjs"]},
+    {"id":"URL-01","reference":"https://url.spec.whatwg.org/","verification":"automatic","tests":["studio/test/model.test.mjs"]},
+    {"id":"A11Y-01","reference":"https://www.w3.org/TR/WCAG22/","verification":"automatic-subset","tests":["studio/test/contrast.test.mjs"]},
+    {"id":"A11Y-02","reference":"https://www.w3.org/TR/wai-aria-1.2/","verification":"manual-open","tests":[],"record":"studio/VALIDATION.md"},
+    {"id":"SVG-01","reference":"https://www.w3.org/TR/SVG11/","verification":"mixed","tests":["studio/test/build.test.mjs"],"record":"studio/VALIDATION.md"},
+    {"id":"EVIDENCE-01","reference":"studio/contracts/atlas-input-v1.md","verification":"automatic","tests":["studio/test/build.test.mjs","studio/test/model.test.mjs","studio/tools/test_package_atlas.py"]},
+    {"id":"CLAIM-01","reference":"studio/contracts/STANDARDS.md","verification":"manual-open","tests":[],"record":"studio/VALIDATION.md"}
+  ]
+}

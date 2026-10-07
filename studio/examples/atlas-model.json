@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "title": "A portable evidence example",
+  "subtitle": "Python packaging example",
+  "demonstration": true,
+  "sources": [{"id":"reference","repo":"authored example","path":"evidence/reference.md"}],
+  "terms": [{"term":"application","references":[{"source":"reference","line":4}]}],
+  "routes": [{
+    "id":"example","title":"Request and storage","shortTitle":"Request path","group":"EXAMPLE SYSTEM",
+    "summary":"An authored three-component system with explicit evidence and one open design question.",
+    "nodes":[
+      {"id":"client","label":"Client","kind":"frontend","status":"documented","symbols":[],"sources":[{"source":"reference","line":4}],"x":40,"y":100,"width":220,"height":90},
+      {"id":"service","label":"Application service","kind":"backend","status":"documented","symbols":[],"sources":[{"source":"reference","line":4,"end_line":5}],"x":400,"y":100,"width":220,"height":90},
+      {"id":"store","label":"Record store","kind":"database","status":"unresolved","symbols":[],"sources":[{"source":"reference","line":5,"end_line":6}],"x":760,"y":100,"width":220,"height":90}
+    ],
+    "edges":[
+      {"id":"request","from":"client","to":"service","label":"Request","status":"documented","sources":[{"source":"reference","line":4}]},
+      {"id":"read","from":"service","to":"store","label":"Read","status":"documented","sources":[{"source":"reference","line":5}]}
+    ],
+    "unknowns":["Define the data retention policy before accepting this design."]
+  }]
+}

@@ -5,6 +5,7 @@ import {createHash} from 'node:crypto';
 import {createRouter} from '../archify/renderers/architecture/routing.mjs';
 import {validateModel} from './model.mjs';
 import {exampleAtlas} from './example.mjs';
+import {parseJSONStrict} from './json-input.mjs';
 
 const here=path.dirname(fileURLToPath(import.meta.url));
 export function safeInput(root,relative){
@@ -15,7 +16,7 @@ export function safeInput(root,relative){
   if(fs.statSync(candidate).size>20*1024*1024)throw new Error('Input file exceeds 20 MiB');
   return candidate;
 }
-export function scriptJSON(value){return JSON.stringify(value).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');}
+export function scriptJSON(value){const serialized=JSON.stringify(value,(_key,item)=>{if(typeof item==='number'&&(!Number.isFinite(item)||(Number.isInteger(item)&&!Number.isSafeInteger(item))))throw new Error('Cannot serialize a non-interoperable JSON number');return item;});parseJSONStrict(serialized,{maxBytes:128*1024*1024});return serialized.replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');}
 export function prepareGeometry(data){
   validateModel(data);
   for(const r of data.routes){
@@ -32,22 +33,22 @@ export function prepareGeometry(data){
   }return data;
 }
 export function importAtlas(directory){
-  const input=JSON.parse(fs.readFileSync(safeInput(directory,'atlas-data.json'),'utf8'));
+  const input=parseJSONStrict(fs.readFileSync(safeInput(directory,'atlas-data.json')));
   if(!Array.isArray(input.routes)||input.routes.length>100||!Array.isArray(input.sources)||input.sources.length>5000)throw new Error('Unsupported atlas');
   let sourceBytes=0;
-  const sources=input.sources.map(s=>{const file=safeInput(directory,s.raw);sourceBytes+=fs.statSync(file).size;if(sourceBytes>64*1024*1024)throw new Error('Combined source text exceeds 64 MiB');const bytes=fs.readFileSync(file);if(createHash('sha256').update(bytes).digest('hex')!==s.sha256)throw new Error(`Source hash mismatch: ${s.id}`);return {...s,text:bytes.toString('utf8')};});
+  const sources=input.sources.map(s=>{const file=safeInput(directory,s.raw);sourceBytes+=fs.statSync(file).size;if(sourceBytes>64*1024*1024)throw new Error('Combined source text exceeds 64 MiB');const bytes=fs.readFileSync(file);if(createHash('sha256').update(bytes).digest('hex')!==s.sha256)throw new Error(`Source hash mismatch: ${s.id}`);return {...s,text:new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(bytes)};});
   const routes=input.routes.map(r=>{
-    const candidate=JSON.parse(fs.readFileSync(safeInput(directory,r.candidate),'utf8'));
+    const candidate=parseJSONStrict(fs.readFileSync(safeInput(directory,r.candidate)));
     if(candidate.diagram_type!=='architecture')throw new Error('Studio currently supports architecture atlas diagrams');
     if(JSON.stringify(candidate.components.map(n=>n.id))!==JSON.stringify(r.nodes.map(n=>n.id))||JSON.stringify(candidate.connections.map(e=>[e.from,e.to,e.label]))!==JSON.stringify(r.edges.map(e=>[e.from,e.to,e.label])))throw new Error(`Diagram candidate does not match evidence topology: ${r.id}`);
     const componentMap=new Map(candidate.components.map(n=>[n.id,n]));
-    return {...r,shortTitle:r.title.split(':')[0],group:r.id==='overview'?'START HERE':r.id.startsWith('windows')?'WINDOWS INTERFACES':['sdk','ownership-lifecycle'].includes(r.id)?'APPLICATION INTEGRATION':'FIRMWARE & TRANSPORT',nodes:r.nodes.map(n=>{const c=componentMap.get(n.id);if(!c)throw new Error(`Missing component ${n.id}`);return {...n,x:c.pos[0],y:c.pos[1],width:c.size[0],height:Math.max(c.size[1],84),sublabel:c.sublabel};}),edges:r.edges.map((e,i)=>({...candidate.connections[i],...e,id:candidate.connections[i]?.id||`${r.id}-edge-${i}`}))};
+    return {...r,shortTitle:r.shortTitle||r.title.split(':')[0],group:r.group||(r.id==='overview'?'START HERE':r.id.startsWith('windows')?'WINDOWS INTERFACES':['sdk','ownership-lifecycle'].includes(r.id)?'APPLICATION INTEGRATION':'FIRMWARE & TRANSPORT'),nodes:r.nodes.map(n=>{const c=componentMap.get(n.id);if(!c)throw new Error(`Missing component ${n.id}`);return {...n,x:c.pos[0],y:c.pos[1],width:c.size[0],height:Math.max(c.size[1],84),sublabel:c.sublabel};}),edges:r.edges.map((e,i)=>({...candidate.connections[i],...e,id:candidate.connections[i]?.id||`${r.id}-edge-${i}`}))};
   });
   const groupOrder=['START HERE','WINDOWS INTERFACES','FIRMWARE & TRANSPORT','APPLICATION INTEGRATION'];
   routes.sort((a,b)=>groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group));
   const sourceByHref=new Map(sources.map(s=>[s.href,s]));
   const terms=(input.terms||[]).map(t=>({...t,references:(t.references||[]).map(ref=>{const source=ref.source||sourceByHref.get((ref.href||'').split('#')[0])?.id;if(!source)throw new Error(`Indexed term has no source: ${t.term}`);return {...ref,source};})}));
-  return {schemaVersion:1,title:input.title||'Evidence atlas',subtitle:input.subtitle||'Retained research',description:'A local research atlas. Evidence boundaries are retained.',demonstration:false,routes,sources,terms,upstream:input.archify_revision||'73aaa0696e8f72c232ea710e6fa94fd953f3e773'};
+  return {schemaVersion:1,title:input.title||'Evidence atlas',subtitle:input.subtitle||'Retained research',description:'A local research atlas. Evidence boundaries are retained.',demonstration:input.demonstration===true,routes,sources,terms,upstream:input.archify_revision||'73aaa0696e8f72c232ea710e6fa94fd953f3e773'};
 }
 export function buildHTML(data){
   const model=prepareGeometry(structuredClone(data));

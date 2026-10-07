@@ -2,6 +2,19 @@
 
 Upstream base: `73aaa0696e8f72c232ea710e6fa94fd953f3e773`. Studio implementation is a separate application; these results do not extend upstream delivery receipts to the Studio presentation.
 
+## Standards and Python follow-up
+
+Baseline for this follow-up: `573fdde05b57151f63a18c4579197ed72c8749b4`.
+
+- `npm run check:all`: 30 Node tests and 9 Python tests passed locally on Node 24.18.0 / Python 3.14.3, with Python compilation and the nine-entry standards-registry integrity check. No skipped tests.
+- The public Python example packaged successfully and built through the actual Studio importer. Repeating identical input returned `unchanged`.
+- The retained private atlas remained importable: 14 diagrams, 136 components and 315 sources. No source files were published by the check.
+- Tests exercise real loopback GET/HEAD/405 responses, strict JSON input, unknown model versions, false provenance, no-overwrite/idempotent packets, source-root escape, exact byte preservation, and metadata expansion beyond the importer limit.
+- Independent review reproduced three P2 cases: source BOM stripping, generated packet JSON exceeding the importer limit, and ignored Python fields bypassing Unicode/depth checks. All three now have failing-then-passing regressions and the complete suite passes.
+- Scope remains explicit: registry/selected criteria are not full RFC/WCAG/SVG certification. Browser appearance and interaction behavior were not requalified for this import/HTTP follow-up. Hosted CI is a separate result visible in GitHub Actions for the published revision.
+
+The following sections retain the initial Studio qualification evidence.
+
 ## Local commands
 
 - `npm run check`: syntax checks and 24 Studio tests passed, zero skips. Coverage includes scoped search, URL/line roundtrip, query isolation, cyclic reachability, malformed metadata, empty IDs, source integrity, line bounds, external directory junction containment, bounded edge geometry, deterministic routing, import candidate topology, HTML serialization and license retention.

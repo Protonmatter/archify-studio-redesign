@@ -6,6 +6,7 @@ const list=(v,name,max)=>{if(!Array.isArray(v)||v.length>max)throw new Error(`In
 const identifier=(value,name)=>{text(value,name,200);if(!value.trim())throw new Error(`Empty ${name}`);};
 export function validateModel(data) {
   if(!data||typeof data!=='object') throw new Error('Expected an atlas object');
+  if(data.schemaVersion!==undefined&&data.schemaVersion!==1)throw new Error('Unsupported Studio model version');
   text(data.title,'atlas title',300);
   list(data.sources,'sources',5000);list(data.terms,'terms',30000);
   const sourceMap=new Map();let sourceBytes=0;
