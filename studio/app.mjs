@@ -417,7 +417,10 @@ function resultCopy(item,q){
 function performSearch(){
   const query=$('search-input').value,q=query.trim().toLowerCase(),rows=search(data,query,searchScope,state.route,state.filter),box=$('search-results');box.replaceChildren();
   for(const b of document.querySelectorAll('[data-search-scope]'))b.setAttribute('aria-pressed',String(b.dataset.searchScope===searchScope));
-  $('search-count').textContent=query.trim()?`${rows.length}${rows.length===100?' (first 100)':''} result${rows.length===1?'':'s'} · ${searchScope==='all'?'entire atlas':'this diagram'} · ${state.filter==='all'?'all evidence states':statusLabel(state.filter).toLowerCase()+' only'}`:'Search component names, exact symbols, connections and source paths.';
+  $('search-count').textContent=query.trim()?`${rows.length}${rows.length===100?' (first 100)':''} result${rows.length===1?'':'s'} · ${searchScope==='all'?'entire atlas':'this diagram'}${state.filter==='all'?' · all evidence states':''}`:'Search component names, exact symbols, connections and source paths.';
+  /* The status filter applies to search from every view, so search shows it and can clear it. */
+  const filterSlot=$('search-filter');filterSlot.replaceChildren();
+  if(state.filter!=='all'){const chip=html('button',undefined,'chip');chip.dataset.status=state.filter;chip.setAttribute('aria-pressed','true');chip.setAttribute('aria-label',`Only ${statusLabel(state.filter).toLowerCase()} evidence. Clear this filter`);chip.append(glyph(state.filter),`Only ${statusLabel(state.filter).toLowerCase()}`,closeIcon());chip.onclick=()=>{navigate({filter:'all'});performSearch();$('search-input').focus();};filterSlot.append(chip);}
   const groups={node:'COMPONENTS',edge:'CONNECTIONS',source:'SOURCES'},order=[...new Set(rows.map(r=>r.type))];
   for(const type of order){
     box.append(html('div',groups[type],'result-group'));
@@ -476,7 +479,10 @@ function syncFromHistory(){state=decodeState(location.hash,data);trace='';if(isS
 window.addEventListener('popstate',syncFromHistory);window.addEventListener('hashchange',syncFromHistory);
 if('ResizeObserver' in window)new ResizeObserver(()=>requestAnimationFrame(updateMinimapView)).observe($('canvas'));else window.addEventListener('resize',updateMinimapView);
 matchMedia('(max-width:980px)').addEventListener('change',e=>{const active=document.activeElement;if(!e.matches){body.classList.remove('nav-open');$('scrim').hidden=true;}$('nav-toggle').setAttribute('aria-expanded',String(navIsOpen()));if(active&&active!==body)ensureFocus();});
-matchMedia('(max-width:700px)').addEventListener('change',e=>{const active=document.activeElement;body.classList.toggle('sheet-open',e.matches&&Boolean(state.selected));render();if(active&&active!==body)ensureFocus();});
+matchMedia('(max-width:700px)').addEventListener('change',e=>{
+  const active=document.activeElement;body.classList.toggle('sheet-open',e.matches&&Boolean(state.selected));render();if(active&&active!==body)ensureFocus();
+  if(e.matches&&state.selected&&state.view==='diagram'&&state.selectionType!=='source')requestAnimationFrame(()=>focusSelection(false));
+});
 document.addEventListener('keydown',e=>{
   if(document.querySelector('dialog[open]')||e.ctrlKey||e.metaKey||e.altKey)return;if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
   if(e.key==='/'){e.preventDefault();openSearch();}
@@ -517,6 +523,6 @@ const mapMove=e=>{const m=minimap.getScreenCTM();if(!m)return;const p=new DOMPoi
 minimap.onpointerdown=e=>{mapDrag=true;minimap.setPointerCapture(e.pointerId);mapMove(e);};minimap.onpointermove=e=>{if(mapDrag)mapMove(e);};minimap.onpointerup=minimap.onpointercancel=()=>{mapDrag=false;updateCamera();};
 let resizing=false;const resizeHandle=$('resize-handle');function sizePanel(value){const width=Math.max(280,Math.min(560,value,innerWidth*.45));document.documentElement.style.setProperty('--panel-width',width+'px');storage.set('panelWidth',width);}
 if('ResizeObserver' in window)new ResizeObserver(([entry])=>{const width=Math.round(entry.contentRect.width+parseFloat(getComputedStyle($('inspector')).paddingLeft)+parseFloat(getComputedStyle($('inspector')).paddingRight));if(width>0)resizeHandle.setAttribute('aria-valuenow',String(width));}).observe($('inspector'));
-resizeHandle.onpointerdown=e=>{if(isNarrow())return;resizing=true;resizeHandle.setPointerCapture(e.pointerId);};resizeHandle.onpointermove=e=>{if(resizing)sizePanel($('workbench').getBoundingClientRect().right-e.clientX);};resizeHandle.onpointerup=resizeHandle.onpointercancel=()=>{resizing=false;};resizeHandle.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();sizePanel($('inspector').getBoundingClientRect().width+(e.key==='ArrowLeft'?20:-20));}};
+resizeHandle.onpointerdown=e=>{resizing=true;resizeHandle.setPointerCapture(e.pointerId);};resizeHandle.onpointermove=e=>{if(resizing)sizePanel($('workbench').getBoundingClientRect().right-e.clientX);};resizeHandle.onpointerup=resizeHandle.onpointercancel=()=>{resizing=false;};resizeHandle.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();sizePanel($('inspector').getBoundingClientRect().width+(e.key==='ArrowLeft'?20:-20));}};
 render();
 if(state.selected&&state.selectionType!=='source'&&state.view==='diagram'&&isSmall())focusSelection(false);

@@ -19,7 +19,8 @@ kbd{font:11px var(--mono);border:1px solid var(--rule);border-radius:3px;padding
 .mono-label{font:10.5px var(--mono);letter-spacing:1.3px;color:var(--muted);text-transform:uppercase}
 
 /* Evidence glyphs: shape, line style and color each carry the state */
-.glyph{width:10px;height:10px;flex:none;color:var(--ink-2);overflow:visible}
+/* Glyph shapes set their own strokes; never inherit the stroke that button icons use. */
+.glyph{width:10px;height:10px;flex:none;color:var(--ink-2);overflow:visible;stroke:none}
 .glyph[data-status=observed],.glyph[data-status=software-tested]{color:var(--accent)}
 .glyph[data-status=unresolved]{color:var(--amber)}
 .glyph[data-status=failed]{color:var(--rose)}
@@ -271,7 +272,10 @@ dialog::backdrop{background:#141d1966}
 .search-field>svg{width:18px;height:18px;fill:none;stroke:var(--accent);stroke-width:1.7;flex:none}
 .search-field input{flex:1;min-width:0;border:0;background:none;font-size:17px;color:var(--ink);outline:none;padding:14px 0}
 .search-field .icon-button svg{width:14px;height:14px}
+.search-status{display:flex;align-items:center;justify-content:space-between;gap:8px;padding-right:18px}
 #search-count{padding:10px 18px 4px;font:11px var(--mono);color:var(--muted)}
+#search-filter .chip{height:28px;margin-top:6px}
+#search-filter .chip svg:last-child{width:10px;height:10px;stroke:currentColor;stroke-width:1.6;fill:none}
 .search-results{max-height:52vh;overflow:auto;padding:4px 10px 10px}
 .result-group{padding:12px 8px 6px;font:10.5px var(--mono);letter-spacing:1.3px;color:var(--muted)}
 .search-result{width:100%;display:grid;grid-template-columns:14px minmax(0,1fr) auto;gap:12px;align-items:center;min-height:54px;padding:8px 10px;border-radius:3px;text-align:left}
