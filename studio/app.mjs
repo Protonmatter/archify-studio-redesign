@@ -48,9 +48,11 @@ const closeDialog=id=>$(id).close();
 async function copyText(text,label){try{await navigator.clipboard.writeText(text);announce(label+' copied.');}catch{announce('Clipboard unavailable. Select the text to copy it.');}}
 
 function navigate(patch,{replace=false}={}){
-  const next=transitionState(state,patch,viewQueries);
-  if(patch.route&&patch.route!==state.route&&!Object.hasOwn(patch,'selected')){next.selected='';next.selectionType='node';body.classList.remove('sheet-open');}
+  const next=transitionState(state,patch,viewQueries),hadSelection=Boolean(state.selected);
+  if(patch.route&&patch.route!==state.route&&!Object.hasOwn(patch,'selected')){next.selected='';next.selectionType='node';}
   state=decodeState(encodeState(next),data);trace='';
+  /* A sheet opened for a selection closes when any navigation clears it; one opened from Details stays. */
+  if(hadSelection&&!state.selected)body.classList.remove('sheet-open');
   const hash=encodeState(state);if(location.hash!==hash)history[replace?'replaceState':'pushState'](null,'',hash);
   render();
 }
@@ -162,12 +164,20 @@ function updateCamera(save=true){
 }
 function zoom(factor){getCamera().zoom=Math.max(.5,Math.min(4,getCamera().zoom*factor));updateCamera();}
 function fit(){const[x,y,w,h]=route().bounds;cameras.set(state.route,{x:x+w/2,y:y+h/2,zoom:1});updateCamera();}
+/* Approximate extent of a connection's text at its label position (11.5px monospace is about 7px a character). */
+const edgeTextHalfWidth=e=>e.label.length*3.6;
+const edgeTextBelow=()=>6;
 function focusSelection(notify=true){
   const r=route();let ids=[];
   if(state.selectionType==='node'&&state.selected)ids=[...(trace?connected(r,state.selected,trace):new Set([state.selected,...r.edges.flatMap(e=>e.from===state.selected?[e.to]:e.to===state.selected?[e.from]:[])]))];
   else if(state.selectionType==='edge'){const e=r.edges.find(e=>e.id===state.selected);if(e)ids=[e.from,e.to];}
   const nodes=r.nodes.filter(n=>ids.includes(n.id));if(!nodes.length)return;
-  const pad=60,minX=Math.min(...nodes.map(n=>n.x))-pad,minY=Math.min(...nodes.map(n=>n.y))-pad,maxX=Math.max(...nodes.map(n=>n.x+n.width))+pad,maxY=Math.max(...nodes.map(n=>n.y+n.height))+pad;
+  /* Routed paths can detour well outside their endpoint boxes, so the frame includes every point and label of the
+     connections in view: the selected one, or those among a selected component and its neighbors. */
+  const framed=state.selectionType==='edge'?r.edges.filter(e=>e.id===state.selected):r.edges.filter(e=>ids.includes(e.from)&&ids.includes(e.to));
+  const xs=[...nodes.flatMap(n=>[n.x,n.x+n.width]),...framed.flatMap(e=>[...e.points.map(p=>p[0]),e.labelX-edgeTextHalfWidth(e),e.labelX+edgeTextHalfWidth(e)])];
+  const ys=[...nodes.flatMap(n=>[n.y,n.y+n.height]),...framed.flatMap(e=>[...e.points.map(p=>p[1]),e.labelY-14,e.labelY+edgeTextBelow(e)])];
+  const pad=60,minX=Math.min(...xs)-pad,minY=Math.min(...ys)-pad,maxX=Math.max(...xs)+pad,maxY=Math.max(...ys)+pad;
   /* Fit the box into the part of the canvas that is actually visible: below the masthead and above a phone sheet. */
   const b=r.bounds,rect=$('canvas').getBoundingClientRect(),k=Math.min(rect.width/b[2],rect.height/b[3]);if(!k)return;
   const sheetTop=isSmall()&&body.classList.contains('sheet-open')?innerHeight-$('inspector').offsetHeight:Infinity;
