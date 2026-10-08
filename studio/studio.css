@@ -317,7 +317,7 @@ mark{background:var(--mark);color:var(--accent-strong);border-radius:2px;padding
 .graph-node:hover .node-box,.graph-node:focus-visible .node-box{stroke:var(--accent);stroke-width:2}
 .graph-node:focus-visible .node-halo{stroke:var(--accent);stroke-opacity:.3}
 .graph-node[data-near=true] .node-box{stroke:var(--accent);stroke-width:1.4}
-.graph-node[data-selected=true] .node-box{stroke:var(--accent);stroke-width:2.4;stroke-dasharray:none}
+.graph-node[data-selected=true] .node-box{stroke:var(--accent);stroke-width:2.4}
 .graph-node[data-selected=true] .node-halo{stroke:var(--accent);stroke-opacity:.18}
 .graph-node[data-dim=true],.graph-edge[data-dim=true],.edge-label[data-dim=true]{opacity:.22}
 .edge-path{stroke:var(--strong-rule);stroke-width:1.5;fill:none;marker-end:url(#arrow)}

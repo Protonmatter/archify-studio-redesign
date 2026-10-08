@@ -80,6 +80,7 @@ function setNav(open){
   if(isNarrow()){body.classList.toggle('nav-open',open);$('scrim').hidden=!open;}
   else{body.classList.toggle('nav-collapsed',!open);storage.set('directory',open);}
   $('nav-toggle').setAttribute('aria-expanded',String(open));
+  if(!open&&$('directory').contains(document.activeElement))$('nav-toggle').focus({preventScroll:true});
 }
 const navIsOpen=()=>isNarrow()?body.classList.contains('nav-open'):!body.classList.contains('nav-collapsed');
 
@@ -440,7 +441,7 @@ $('edition-label').textContent=data.demonstration?'REFERENCE EDITION':'LOCAL RES
 $('dataset-note').textContent=data.demonstration?'An authored example. No live system data.':'Included evidence stays in this offline artifact.';
 setTheme(storage.get('theme',null,isTheme)||(matchMedia('(prefers-color-scheme: dark)').matches?'ink':'paper'),false);
 matchMedia('(prefers-color-scheme: dark)').addEventListener('change',e=>{if(!storage.get('theme',null,isTheme))setTheme(e.matches?'ink':'paper',false);});
-document.documentElement.style.setProperty('--panel-width',storage.get('panelWidth',340,v=>Number.isFinite(v)&&v>=280&&v<=560)+'px');
+const savedWidth=storage.get('panelWidth',null,v=>Number.isFinite(v)&&v>=280&&v<=560);if(savedWidth)document.documentElement.style.setProperty('--panel-width',savedWidth+'px');
 if(storage.get('inspector',true,v=>typeof v==='boolean')===false)body.classList.add('no-inspector');
 if(storage.get('directory',true,v=>typeof v==='boolean')===false&&!isNarrow())body.classList.add('nav-collapsed');
 if(state.selected&&isSmall())body.classList.add('sheet-open');
