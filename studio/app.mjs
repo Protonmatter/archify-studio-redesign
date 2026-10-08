@@ -181,7 +181,8 @@ function updateMinimapView(){
   const w=canvas.clientWidth/scale,h=canvas.clientHeight/scale,x=c.x-w/2,y=c.y-h/2;
   for(const[k,v]of Object.entries({x,y,width:w,height:h}))view.setAttribute(k,String(v));
   /* The overview only earns its space when part of the diagram is out of view. */
-  $('minimap').hidden=x<=b[0]+1&&y<=b[1]+1&&x+w>=b[0]+b[2]-1&&y+h>=b[1]+b[3]-1;
+  /* SVG elements have no `hidden` property, so toggle the attribute itself. */
+  $('minimap').toggleAttribute('hidden',x<=b[0]+1&&y<=b[1]+1&&x+w>=b[0]+b[2]-1&&y+h>=b[1]+b[3]-1);
 }
 function highlight(){
   const r=route(),selected=state.selectionType==='node'?r.nodes.find(n=>n.id===state.selected):null;
