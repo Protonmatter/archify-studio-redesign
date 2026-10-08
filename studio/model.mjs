@@ -32,6 +32,7 @@ export function validateModel(data) {
   for(const route of data.routes){
     identifier(route.id,'route ID'); text(route.title,'route title',500);
     if(route.summary!==undefined)text(route.summary,'route summary');
+    for(const key of ['group','shortTitle','intent','provenance'])if(route[key]!==undefined)text(route[key],`route ${key}`);
     for(const unknown of list(route.unknowns||[],'unknowns',1000))text(unknown,'unknown');
     if(routes.has(route.id)) throw new Error(`Duplicate route ${route.id}`); routes.add(route.id);
     if(!Array.isArray(route.nodes)||!route.nodes.length||route.nodes.length>500||!Array.isArray(route.edges)||route.edges.length>2000) throw new Error('Diagram exceeds node/edge limits');
