@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateModel, encodeState, decodeState, transitionState, search, gaps, connected } from '../model.mjs';
+import { validateModel, encodeState, decodeState, transitionState, search, gaps, connected, transportSummary } from '../model.mjs';
 
 const data = { title:'Example', routes:[{ id:'r1', title:'First', group:'System', summary:'', nodes:[{id:'a',label:'API',status:'documented',symbols:['ReadAPI'],x:0,y:0,width:220,height:88},{id:'b',label:'Database',status:'unresolved',symbols:[],x:400,y:0,width:220,height:88}],edges:[{id:'e',from:'a',to:'b',label:'query',status:'unresolved'}],unknowns:['Missing reference'] },{id:'r2',title:'Second',group:'System',summary:'',nodes:[{id:'a',label:'ReadAPI metrics',status:'static',symbols:[],x:0,y:0,width:220,height:88}],edges:[],unknowns:[]}],sources:[],terms:[] };
 test('valid model and repeated node identifiers across routes',()=>assert.equal(validateModel(structuredClone(data)).routes.length,2));
@@ -20,6 +20,19 @@ test('source, reference and atlas presentation metadata must be text',()=>{
   const base=()=>{const d=structuredClone(data);d.sources=[{id:'s',path:'source.txt',text:'one'}];d.routes[0].nodes[0].sources=[{source:'s',line:1}];return d;};
   assert.equal(validateModel(base()).sources.length,1);
   for(const mutate of [d=>d.sources[0].scope=42,d=>d.sources[0].repo={},d=>d.sources[0].status='probably',d=>d.routes[0].nodes[0].sources[0].scope=7,d=>d.routes[0].nodes[0].sources[0].path=[],d=>d.subtitle=1]){const d=base();mutate(d);assert.throws(()=>validateModel(d));}
+});
+test('relationship transport is validated and summarized',()=>{
+  const with_=t=>{const d=structuredClone(data);d.routes[0].edges[0].transport=t;return d;};
+  assert.equal(validateModel(with_({mechanism:'IOCTL',call:'DeviceIoControl(IOCTL_EXAMPLE)'})).routes[0].edges[0].transport.mechanism,'IOCTL');
+  validateModel(with_({mechanism:'HTTPS',port:0,attributes:[{name:'TLS',value:'1.3'}]}));validateModel(with_({port:65535}));
+  for(const t of [{},[],'HTTPS',{mechanism:''},{mechanism:'  '},{protocol:7},{port:65536},{port:-1},{port:4.5},{port:'443'},{call:'x',surprise:true},{attributes:[{name:'a'}]},{attributes:{}}])assert.throws(()=>validateModel(with_(t)),undefined,JSON.stringify(t));
+  assert.equal(transportSummary({mechanism:'HTTPS',protocol:'HTTP/1.1',port:443,call:'POST /v1/requests'}),'HTTPS · HTTP/1.1 :443 · POST /v1/requests');
+  assert.equal(transportSummary({mechanism:'syscall',call:'read(2)'}),'syscall · read(2)');
+  assert.equal(transportSummary({port:22}),':22');assert.equal(transportSummary(undefined),'');
+});
+test('search finds relationships by transport, including attributes',()=>{
+  const d=structuredClone(data);d.routes[0].edges[0].transport={mechanism:'IOCTL',call:'DeviceIoControl',attributes:[{name:'Device',value:'QcomFwDevice'}]};
+  assert.deepEqual(search(d,'deviceiocontrol','all','r1').map(x=>x.id),['e']);assert.deepEqual(search(d,'qcomfw','all','r1').map(x=>x.id),['e']);
 });
 test('node presentation metadata must be text',()=>{for(const key of ['sublabel','kind','full_label']){const d=structuredClone(data);d.routes[0].nodes[0][key]=42;assert.throws(()=>validateModel(d));}});
 test('source occurrence line survives refresh state',()=>{const d=structuredClone(data);d.sources=[{id:'s',path:'file.txt',text:Array(400).fill('line').join('\n')}];const s=decodeState('#route=r1&view=evidence&selectionType=source&selected=s&line=315',d);assert.equal(decodeState(encodeState(s),d).line,315);assert.equal(decodeState('#route=r1&selectionType=source&selected=s&line=999',d).line,undefined);});

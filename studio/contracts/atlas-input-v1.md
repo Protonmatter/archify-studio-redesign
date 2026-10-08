@@ -4,7 +4,7 @@ The reusable Python packaging entrypoint is `studio/tools/package_atlas.py`. Its
 
 ## Input
 
-`--model` names UTF-8 JSON with `title`, `routes`, `sources`, and optional `terms`, `subtitle`, `demonstration`. Each route declares `id`, `title`, `nodes`, `edges`, and optional `summary`, `group`, `shortTitle`, `unknowns`. Node fields match `studio/model.mjs`: ID, label, evidence status, finite x/y/width/height, symbols and citations. Edges declare unique IDs, valid from/to IDs, label, status, citations and optional explicit routing.
+`--model` names UTF-8 JSON with `title`, `routes`, `sources`, and optional `terms`, `subtitle`, `demonstration`. Each route declares `id`, `title`, `nodes`, `edges`, and optional `summary`, `group`, `shortTitle`, `unknowns`. Node fields match `studio/model.mjs`: ID, label, evidence status, finite x/y/width/height, symbols and citations. Edges declare unique IDs, valid from/to IDs, label, status, citations and optional explicit routing. An edge may add an optional `transport` object (RFC 0002) with any of `mechanism`, `protocol` and `call` (non-empty text up to 500 characters), `port` (integer 0 to 65535) and `attributes` (up to 20 `{name, value}` text pairs); it must contain at least one of them, and unknown fields are rejected. Transport is authored metadata under the edge's evidence status, not an observed capture.
 
 An explicit `schemaVersion` must be the integer 1; omission retains compatibility with older versionless packets. Unknown versions fail rather than being silently interpreted as v1.
 

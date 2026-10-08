@@ -8,5 +8,21 @@ export function exampleAtlas(){
   const edges=[e('request','client','gateway','HTTPS request'),e('claims','gateway','identity','Verify claims'),e('dispatch','gateway','router','Dispatch'),e('read','router','cache','Read'),e('miss','cache','store','Cache miss','unresolved','The cache invalidation and consistency contract still needs a design decision.'),e('enqueue','router','worker','Enqueue'),e('persist','worker','store','Persist'),e('publish','worker','events','Publish result'),e('observe','worker','telemetry','Emit trace')];
   const overview={id:'request-path',title:'Request to response',shortTitle:'Request path',group:'SYSTEM ARCHITECTURE',summary:'Follow a request through identity, application logic and durable state. Inspect any component or connection to read its evidence.',nodes,edges,unknowns:['Define cache invalidation and consistency before accepting this path.'],intent:'Understand how a request reaches durable state.',provenance:'Authored example · illustrative only'};
   const work={id:'worker-path',title:'Work beyond the request',shortTitle:'Background work',group:'SYSTEM ARCHITECTURE',summary:'The asynchronous boundary, delivery path and unresolved retry contract.',nodes:[n('queue','Work queue','Transport',60,160,'Receives accepted work.'),n('worker','Background worker','Execution',400,160,'Processes work with an explicit operation identity.'),n('events','Event stream','Transport',740,160,'Publishes completed work.'),n('deadletter','Dead-letter queue','Recovery',400,380,'Captures work that cannot complete under the bounded retry policy.','unresolved')],edges:[e('consume','queue','worker','Consume'),e('complete','worker','events','Complete'),e('retry','worker','deadletter','Retry exhausted','unresolved','The retry count and recovery ownership remain undefined.')],unknowns:[],provenance:'Authored example · illustrative only'};
+  /* Authored transport claims for the example; they share each relationship's evidence state. */
+  const transports={
+    request:{mechanism:'HTTPS',protocol:'HTTP/1.1',port:443,call:'POST /v1/requests',attributes:[{name:'Authentication',value:'Bearer token'}]},
+    claims:{mechanism:'HTTPS',protocol:'OpenID Connect',port:443,call:'GET /.well-known/jwks.json'},
+    dispatch:{mechanism:'gRPC',protocol:'HTTP/2',port:8443,call:'Router.Dispatch'},
+    read:{mechanism:'TCP',protocol:'RESP3',port:6379,call:'GET'},
+    miss:{mechanism:'TCP',protocol:'PostgreSQL wire protocol',port:5432,call:'SELECT'},
+    enqueue:{mechanism:'AMQP',protocol:'AMQP 0-9-1',port:5672,call:'basic.publish'},
+    persist:{mechanism:'TCP',protocol:'PostgreSQL wire protocol',port:5432,call:'INSERT … ON CONFLICT'},
+    publish:{mechanism:'Kafka',port:9092,call:'Produce'},
+    observe:{mechanism:'Unix socket',protocol:'OTLP',call:'sendmsg(2)'},
+    consume:{mechanism:'AMQP',protocol:'AMQP 0-9-1',port:5672,call:'basic.consume'},
+    complete:{mechanism:'Kafka',port:9092,call:'Produce'},
+    retry:{mechanism:'AMQP',protocol:'AMQP 0-9-1',call:'basic.reject (requeue=false)'},
+  };
+  for(const x of [...edges,...work.edges])if(transports[x.id])x.transport=transports[x.id];
   return {schemaVersion:1,title:'Architecture, with evidence.',subtitle:'Reference system',description:'An offline workspace for understanding systems and the evidence behind them.',demonstration:true,routes:[overview,work],sources:[source],terms:[],upstream:'73aaa0696e8f72c232ea710e6fa94fd953f3e773'};
 }

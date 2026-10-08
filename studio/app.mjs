@@ -1,4 +1,4 @@
-import {STATUSES,VIEWS,validateModel,encodeState,decodeState,transitionState,search,gaps,connected,scopedSources} from './model.mjs';
+import {STATUSES,VIEWS,validateModel,encodeState,decodeState,transitionState,search,gaps,connected,scopedSources,transportSummary} from './model.mjs';
 
 /* This module is assembled inline by build.mjs; all content remains on device. */
 const originalHTML='<!doctype html>\n'+document.documentElement.outerHTML;
@@ -26,6 +26,8 @@ const body=document.body;
 /* Evidence vocabulary: each state has a label, a glyph shape and a line style. */
 const STATUS_LABELS={observed:'Observed',static:'Static analysis',documented:'Documented','software-tested':'Software tested',unresolved:'Unresolved',failed:'Failed'};
 const statusLabel=s=>STATUS_LABELS[s]||s;
+/* The on-line chip names the mechanism and port only, so it fits between components; it never replaces the label. */
+const transportChip=t=>{if(!t)return '';const head=t.mechanism||t.protocol||t.call||'';const text=[head,t.port!==undefined?':'+t.port:''].filter(Boolean).join(' ');return text.length>18?text.slice(0,17)+'…':text;};
 const isOpen=s=>s==='unresolved'||s==='failed';
 function glyphShapes(status){
   if(status==='observed')return [svg('circle',{cx:5,cy:5,r:4,fill:'currentColor'})];
@@ -165,8 +167,8 @@ function updateCamera(save=true){
 function zoom(factor){getCamera().zoom=Math.max(.5,Math.min(4,getCamera().zoom*factor));updateCamera();}
 function fit(){const[x,y,w,h]=route().bounds;cameras.set(state.route,{x:x+w/2,y:y+h/2,zoom:1});updateCamera();}
 /* Approximate extent of a connection's text at its label position (11.5px monospace is about 7px a character). */
-const edgeTextHalfWidth=e=>e.label.length*3.6;
-const edgeTextBelow=()=>6;
+const edgeTextHalfWidth=e=>Math.max(e.label.length,transportChip(e.transport).length)*3.6;
+const edgeTextBelow=e=>e.transport?28:6;
 function focusSelection(notify=true){
   const r=route();let ids=[];
   if(state.selectionType==='node'&&state.selected)ids=[...(trace?connected(r,state.selected,trace):new Set([state.selected,...r.edges.flatMap(e=>e.from===state.selected?[e.to]:e.to===state.selected?[e.from]:[])]))];
@@ -194,11 +196,14 @@ function renderDiagram(){
   root.append(defs);
   root.append(svg('text',{x:r.bounds[0]+45,y:Math.min(...r.nodes.map(n=>n.y))-30,class:'sheet-label'},'DIRECTED SYSTEM MAP · FIG. '+num(data.routes.indexOf(r))));
   r.edges.forEach(e=>{
-    const g=svg('g',{'data-edge':e.id,'data-status':e.status,class:'graph-edge',tabindex:0,role:'button','aria-label':`${e.label}: ${name(e.from)} to ${name(e.to)}. ${statusLabel(e.status)}.`});diagramIndex.edges.set(e.id,{edge:e,g});
-    g.append(svg('title',{},`${e.label} · ${statusLabel(e.status)}`),svg('path',{d:e.d,class:'edge-mask'}),svg('path',{d:e.d,class:'edge-path'}),svg('path',{d:e.d,class:'edge-hit'}));
+    const g=svg('g',{'data-edge':e.id,'data-status':e.status,class:'graph-edge',tabindex:0,role:'button','aria-label':`${e.label}: ${name(e.from)} to ${name(e.to)}.${e.transport?' '+transportSummary(e.transport)+'.':''} ${statusLabel(e.status)}.`});diagramIndex.edges.set(e.id,{edge:e,g});
+    g.append(svg('title',{},`${e.label} · ${statusLabel(e.status)}`),svg('path',{d:e.d,class:'edge-mask'}),svg('path',{d:e.d,class:'edge-path'}),svg('path',{d:e.d,class:'edge-flow','aria-hidden':'true'}),svg('path',{d:e.d,class:'edge-hit'}));
     g.onclick=()=>select('edge',e.id);g.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();select('edge',e.id);}};root.append(g);
   });
-  for(const e of r.edges){const label=svg('text',{x:e.labelX,y:e.labelY,class:'edge-label','text-anchor':'middle','data-label':e.id,'data-status':e.status},e.label);diagramIndex.edges.get(e.id).label=label;root.append(label);}
+  for(const e of r.edges){
+    const label=svg('text',{x:e.labelX,y:e.labelY,class:'edge-label','text-anchor':'middle','data-label':e.id,'data-status':e.status},e.label),entry=diagramIndex.edges.get(e.id);entry.label=label;root.append(label);
+    if(e.transport){entry.chip=svg('text',{x:e.labelX,y:e.labelY+22,class:'edge-transport','text-anchor':'middle','data-transport':e.id,'data-status':e.status},transportChip(e.transport));root.append(entry.chip);}
+  }
   r.nodes.forEach((n,i)=>{
     const kind=n.sublabel||n.kind||'Component';
     const g=svg('g',{'data-node':n.id,'data-status':n.status,class:'graph-node',tabindex:0,role:'button','aria-label':`${n.label}. ${kind}. ${statusLabel(n.status)}.`});diagramIndex.nodes.set(n.id,{node:n,g});
@@ -242,11 +247,11 @@ function highlight(){
     g.dataset.dim=String(filtered(n)||Boolean(reached&&!reached.has(n.id))||Boolean(ends&&!ends.has(n.id)));
     if(mm){mm.dataset.selected=String(isSelected);mm.dataset.near=String(near);}
   }
-  for(const {edge:e,g,label} of diagramIndex.edges.values()){
+  for(const {edge:e,g,label,chip} of diagramIndex.edges.values()){
     const on=edgeOn(e),dim=filtered(e)||((selected||edge)&&!on);
     g.dataset.selected=String(edge?.id===e.id);g.setAttribute('aria-pressed',g.dataset.selected);
     g.dataset.traced=String(Boolean(trace&&on));g.dataset.near=String(Boolean(selected&&on));g.dataset.dim=String(Boolean(dim));
-    if(label){label.dataset.dim=String(Boolean(dim));label.dataset.on=String(Boolean(on));}
+    for(const text of [label,chip])if(text){text.dataset.dim=String(Boolean(dim));text.dataset.on=String(Boolean(on));}
   }
   $('focus-selection').disabled=!(selected||edge);
 }
@@ -312,7 +317,7 @@ function renderItem(box,r,item,type){
     const related=r.edges.filter(e=>e.from===item.id||e.to===item.id),list=html('div');
     for(const e of related){
       const outgoing=e.from===item.id,other=r.nodes.find(n=>n.id===(outgoing?e.to:e.from)),b=html('button',undefined,'relation-row');
-      const copy=html('span',undefined,'rel-copy');copy.append(html('span',other.label,'rel-name'),html('span',e.label,'rel-label'));
+      const copy=html('span',undefined,'rel-copy');copy.append(html('span',other.label,'rel-name'),html('span',e.label+(e.transport?' · '+transportChip(e.transport):''),'rel-label'));
       const status=html('span',undefined,'rel-status');status.dataset.status=e.status;status.append(glyph(e.status),statusLabel(e.status));
       b.append(html('span',outgoing?'OUT':'IN','rel-dir'),copy,status);b.setAttribute('aria-label',`${outgoing?'Outgoing to':'Incoming from'} ${other.label}: ${e.label}, ${statusLabel(e.status)}`);b.onclick=()=>select('edge',e.id);list.append(b);
     }
@@ -321,6 +326,11 @@ function renderItem(box,r,item,type){
     const card=html('div',undefined,'endpoints'),endpoint=(id,role)=>{const n=r.nodes.find(n=>n.id===id),b=html('button',undefined,'endpoint');b.append(html('small',[role,n.sublabel||n.kind].filter(Boolean).join(' · ')),html('span',n.label,'endpoint-name'));b.onclick=()=>select('node',id);return b;};
     const link=html('div',undefined,'endpoint-link');link.dataset.status=item.status;link.setAttribute('aria-hidden','true');link.append(html('span','↓'),html('span',item.label));
     card.append(endpoint(item.from,'From'),link,endpoint(item.to,'To'));box.append(section('Endpoints',card));
+    if(item.transport){
+      const t=item.transport,rows=html('dl',undefined,'transport-list');
+      for(const[k,v,code]of [['Mechanism',t.mechanism],['Protocol',t.protocol],['Port',t.port,true],['Call',t.call,true],...(t.attributes||[]).map(a=>[a.name,a.value])])if(v!==undefined){const row=html('div');row.append(html('dt',k),html('dd',String(v),code?'code':undefined));rows.append(row);}
+      box.append(section('Transport',rows,html('p','As authored for this relationship, under its evidence state. Not a captured trace.','hint')));
+    }
   }
   box.append(section(`Source evidence · ${item.sources?.length||0}`,item.sources?.length?evidenceCards(item.sources):html('p','No source citation was supplied for this item.','hint')));
 }
@@ -344,10 +354,10 @@ function renderInspector(){
 }
 
 /* List views */
-function dataRow({status,title,tag,detail,action,actionLabel='Show on diagram →',active=false}){
+function dataRow({status,title,tag,meta,detail,action,actionLabel='Show on diagram →',active=false}){
   const row=html(action?'button':'article',undefined,'data-row');row.append(status?statusMark(status):html('span'));
   const copy=html('span',undefined,'row-copy'),line=html('span',undefined,'row-title-line');line.append(html('span',title,'row-title'));if(tag)line.append(html('span',tag,'row-tag'));copy.append(line);
-  if(detail)copy.append(html('span',detail,'row-detail'));row.append(copy);
+  if(meta)copy.append(html('span',meta,'row-meta'));if(detail)copy.append(html('span',detail,'row-detail'));row.append(copy);
   if(action){row.append(html('span',actionLabel,'row-action'));row.onclick=action;}else row.append(html('span'));
   row.dataset.active=String(active);return row;
 }
@@ -368,7 +378,7 @@ function renderList(){
     if(state.view==='relationships')for(const rr of routes){
       const rows=rr.edges.filter(e=>state.filter==='all'||e.status===state.filter).map(e=>({e,a:rr.nodes.find(n=>n.id===e.from),b:rr.nodes.find(n=>n.id===e.to)})).filter(({e,a,b})=>(a.label+' '+b.label+' '+e.label+' '+(e.detail||'')).toLowerCase().includes(q));
       if(rows.length){results.append(groupHead(rr,rows.length));count+=rows.length;}
-      for(const{e,a,b}of rows)results.append(dataRow({status:e.status,title:`${a.label} → ${b.label}`,tag:e.label,detail:e.detail,action:()=>showOnDiagram('edge',e.id,rr.id),active:state.selected===e.id&&state.route===rr.id}));
+      for(const{e,a,b}of rows)results.append(dataRow({status:e.status,title:`${a.label} → ${b.label}`,tag:e.label,meta:transportSummary(e.transport),detail:e.detail,action:()=>showOnDiagram('edge',e.id,rr.id),active:state.selected===e.id&&state.route===rr.id}));
     }
     if(state.view==='evidence')for(const s of scopedSources(data,state.scope,state.route).filter(s=>(s.path+' '+(s.repo||'')+' '+(s.scope||'')).toLowerCase().includes(q))){count++;results.append(dataRow({title:s.path,tag:s.scope,detail:`${s.repo||'Source'}${s.text?' · '+s.text.split('\n').length+' lines':' · text not included'}`,action:()=>select('source',s.id),actionLabel:'Read source →',active:state.selected===s.id}));}
     if(state.view==='gaps')for(const rr of routes){
@@ -415,7 +425,9 @@ function resultCopy(item,q){
     sub.append(item.routeTitle);
   }else if(item.type==='edge'){
     const e=r.edges.find(e=>e.id===item.id),name=id=>r.nodes.find(n=>n.id===id)?.label;
-    if(!titleHit&&e.detail){sub.append('Matched in description: ');highlightInto(sub,snippet(e.detail,q),q);sub.append(' · ');}
+    const summary=transportSummary(e.transport);
+    if(!titleHit&&e.detail?.toLowerCase().includes(q)){sub.append('Matched in description: ');highlightInto(sub,snippet(e.detail,q),q);sub.append(' · ');}
+    else if(!titleHit&&summary.toLowerCase().includes(q))sub.append('Transport ',highlightInto(html('span',undefined,'code'),summary,q),' · ');
     sub.append(`${name(e.from)} → ${name(e.to)} · ${item.routeTitle}`);
   }else{
     const source=data.sources.find(s=>s.id===item.id);
@@ -453,7 +465,7 @@ function exportSVG(){
   const css=svg('style',{},document.querySelector('style').textContent);clone.prepend(css);const background=svg('rect',{x:r.bounds[0],y:r.bounds[1],width:r.bounds[2],height:r.bounds[3],style:'fill:var(--canvas)'});css.after(background);
   clone.prepend(svg('desc',{},(r.summary||r.title)+' Evidence states are retained. Built with Archify Studio / Archify, MIT license.'));
   for(const e of clone.querySelectorAll('[data-dim],[data-selected],[data-traced],[data-near],[data-on]'))for(const a of ['data-dim','data-selected','data-traced','data-near','data-on','tabindex','aria-pressed'])e.removeAttribute(a);
-  for(const e of clone.querySelectorAll('.edge-hit'))e.remove();
+  for(const e of clone.querySelectorAll('.edge-hit,.edge-flow'))e.remove();
   download(new XMLSerializer().serializeToString(clone),(r.id||'diagram')+'.svg','image/svg+xml');closeDialog('export-dialog');
 }
 
@@ -477,6 +489,20 @@ for(const button of document.querySelectorAll('[data-view]')){button.onclick=()=
 for(const b of document.querySelectorAll('[data-scope]'))b.onclick=()=>navigate({scope:b.dataset.scope});
 $('zoom-in').onclick=()=>zoom(1.2);$('zoom-out').onclick=()=>zoom(1/1.2);$('zoom-reset').onclick=fit;$('focus-selection').onclick=focusSelection;
 $('shortcuts-open').onclick=()=>$('shortcuts-dialog').showModal();
+const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
+/* Flow modes: beads on the selection's connections (default), on every connection, or none. The control can always
+   stop the motion (WCAG 2.2.2), and reduced motion removes it. Flow shows authored direction, not observed traffic. */
+const FLOW_MODES=['selection','all','off'],FLOW_TEXT={selection:'Flow: selection',all:'Flow: all',off:'Flow: off'};
+let flowMode='selection';
+function setFlow(mode,save=true){
+  flowMode=mode;body.classList.toggle('flow-all',mode==='all');body.classList.toggle('flow-off',mode==='off');
+  const b=$('flow-toggle');b.dataset.mode=mode;b.querySelector('span').textContent=FLOW_TEXT[mode];
+  b.setAttribute('aria-label',`Flow animation: ${mode==='selection'?'on for the selection':mode==='all'?'on for every connection':'off'}. Activate to change.`);
+  if(save)storage.set('flow',mode);
+}
+function syncMotion(){const off=reducedMotion.matches;$('flow-toggle').disabled=off;$('flow-toggle').title=off?'Flow animation is off because your system asks for reduced motion.':'Animate the authored direction of connections. This is not observed traffic.';}
+setFlow(storage.get('flow','selection',v=>FLOW_MODES.includes(v)),false);syncMotion();reducedMotion.addEventListener('change',syncMotion);
+$('flow-toggle').onclick=()=>setFlow(FLOW_MODES[(FLOW_MODES.indexOf(flowMode)+1)%FLOW_MODES.length]);
 $('search-open').onclick=openSearch;$('search-input').oninput=performSearch;
 for(const b of document.querySelectorAll('[data-search-scope]'))b.onclick=()=>{searchScope=b.dataset.searchScope;performSearch();$('search-input').focus();};
 $('search-input').onkeydown=e=>{const first=$('search-results').querySelector('button');if(e.key==='ArrowDown'){e.preventDefault();first?.focus();}else if(e.key==='Enter'&&first){e.preventDefault();first.click();}};

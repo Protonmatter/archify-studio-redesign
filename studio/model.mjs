@@ -1,6 +1,11 @@
 /** Pure data/navigation contracts shared by the build, browser and tests. */
 export const STATUSES = ['observed','static','documented','software-tested','unresolved','failed'];
 export const VIEWS = ['diagram','relationships','evidence','gaps'];
+export const TRANSPORT_FIELDS = ['mechanism','protocol','port','call','attributes'];
+/** One-line description of how a relationship crosses its boundary, e.g. "HTTPS :443 · POST /v1/requests". */
+export function transportSummary(t){if(!t)return '';const head=[t.mechanism,t.protocol&&t.protocol!==t.mechanism?t.protocol:''].filter(Boolean).join(' · ')+(t.port!==undefined?` :${t.port}`:'');return [head.trim(),t.call].filter(Boolean).join(' · ');}
+/** Every searchable transport value, attributes included. */
+export function transportText(t){return t?[transportSummary(t),...(t.attributes||[]).flatMap(a=>[a.name,a.value])].join(' '):'';}
 const text = (v, name, max=20000) => { if(typeof v!=='string'||v.length>max) throw new Error(`Invalid ${name}`); return v; };
 const list=(v,name,max)=>{if(!Array.isArray(v)||v.length>max)throw new Error(`Invalid ${name}`);return v;};
 const identifier=(value,name)=>{text(value,name,200);if(!value.trim())throw new Error(`Empty ${name}`);};
@@ -57,6 +62,14 @@ export function validateModel(data) {
       if(e.detail!==undefined)text(e.detail,'relationship detail');references(e.sources);
       if(e.via!==undefined)for(const point of list(e.via,'waypoints',200)){if(!Array.isArray(point)||point.length!==2||!point.every(n=>Number.isFinite(n)&&Math.abs(n)<=100000))throw new Error('Invalid edge waypoint');}
       for(const key of ['channelX','channelY'])if(e[key]!==undefined&&(!Number.isFinite(e[key])||Math.abs(e[key])>100000))throw new Error('Invalid edge channel');
+      if(e.transport!==undefined){
+        const t=e.transport;if(!t||typeof t!=='object'||Array.isArray(t))throw new Error('Invalid relationship transport');
+        for(const key of Object.keys(t))if(!TRANSPORT_FIELDS.includes(key))throw new Error(`Unknown transport field ${key}`);
+        for(const key of ['mechanism','protocol','call'])if(t[key]!==undefined){text(t[key],`transport ${key}`,500);if(!t[key].trim())throw new Error(`Empty transport ${key}`);}
+        if(t.port!==undefined&&!(Number.isSafeInteger(t.port)&&t.port>=0&&t.port<=65535))throw new Error('Transport port must be an integer from 0 to 65535');
+        for(const a of list(t.attributes||[],'transport attributes',20)){if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('Invalid transport attribute');text(a.name,'transport attribute name',200);text(a.value,'transport attribute value',2000);}
+        if(!['mechanism','protocol','port','call'].some(k=>t[k]!==undefined)&&!(t.attributes||[]).length)throw new Error('Empty relationship transport');
+      }
     }
   }
   return data;
@@ -91,7 +104,7 @@ export function search(data,query,scope,routeId,filter='all'){
   const rows=[];const add=(entry,extra='')=>{const name=entry.title.toLowerCase(),symbols=(entry.symbols||[]).map(s=>s.toLowerCase());const hay=[name,...symbols,extra].join(' ').toLowerCase();if(hay.includes(q)&&(filter==='all'||entry.status===filter)){entry.score=name===q||symbols.includes(q)?0:name.startsWith(q)?1:2;rows.push(entry);}};
   for(const r of data.routes.filter(r=>scope==='all'||r.id===routeId)){
     for(const n of r.nodes)add({type:'node',id:n.id,title:n.label,route:r.id,routeTitle:r.title,status:n.status,symbols:n.symbols||[]},n.detail||'');
-    for(const e of r.edges)add({type:'edge',id:e.id,title:e.label,route:r.id,routeTitle:r.title,status:e.status},e.detail||'');
+    for(const e of r.edges)add({type:'edge',id:e.id,title:e.label,route:r.id,routeTitle:r.title,status:e.status},[e.detail||'',transportText(e.transport)].join(' '));
   }
   const sourceIds=new Set(data.routes.find(r=>r.id===routeId)?.nodes.concat(data.routes.find(r=>r.id===routeId)?.edges||[]).flatMap(n=>(n.sources||[]).map(s=>s.source))||[]);
   for(const s of data.sources.filter(s=>scope==='all'||sourceIds.has(s.id)))add({type:'source',id:s.id,title:s.path,route:routeId,routeTitle:s.repo||'Source',status:s.status||'documented'},s.scope||'');

@@ -79,6 +79,17 @@ class PacketTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 build_packet(data, self.source)
 
+    def test_relationship_transport_passes_through_and_is_validated(self) -> None:
+        data = copy.deepcopy(self.model)
+        data["routes"][0]["nodes"].append({"id": "b", "label": "Second", "kind": "backend", "status": "documented", "symbols": [], "sources": [], "x": 400, "y": 80, "width": 220, "height": 90})
+        data["routes"][0]["edges"].append({"id": "call", "from": "a", "to": "b", "label": "Control", "status": "documented",
+                                             "transport": {"mechanism": "IOCTL", "call": "DeviceIoControl(IOCTL_EXAMPLE)", "attributes": [{"name": "Access", "value": "FILE_ANY_ACCESS"}]}})
+        atlas = json.loads(build_packet(data, self.source)["atlas-data.json"])
+        self.assertEqual(atlas["routes"][0]["edges"][0]["transport"]["call"], "DeviceIoControl(IOCTL_EXAMPLE)")
+        data["routes"][0]["edges"][0]["transport"] = {"port": 70000}
+        with self.assertRaises(ValueError):
+            build_packet(data, self.source)
+
     def test_python_packet_is_accepted_by_real_studio_builder(self) -> None:
         packet = build_packet(self.model, self.source)
         destination = self.root / "packet"

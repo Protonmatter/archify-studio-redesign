@@ -141,6 +141,8 @@ h1{font:400 34px/1.15 var(--display);letter-spacing:-.6px;margin:8px 0 6px;overf
 .canvas-tools .text-tool{padding:0 12px;font-size:12.5px}
 .canvas-tools .focus-tool:not(:disabled){color:var(--accent-strong);font-weight:600}
 .canvas-tools .mono-tool{font:13px var(--mono)}
+.canvas-tools .flow-tool[data-mode=all]{background:var(--accent-soft);color:var(--accent-strong);font-weight:600}
+.canvas-tools .flow-tool[data-mode=off]{color:var(--muted)}
 .tool-rule{width:1px;height:20px;background:var(--rule)}
 .minimap{position:absolute;right:16px;bottom:16px;width:144px;height:90px;border:1px solid var(--rule);border-radius:3px;background:var(--paper);cursor:pointer;z-index:2}
 .mm-node{fill:var(--rule)}
@@ -186,6 +188,10 @@ h1{font:400 34px/1.15 var(--display);letter-spacing:-.6px;margin:8px 0 6px;overf
 .trace{display:grid;grid-template-columns:repeat(3,minmax(0,1fr))}
 .trace button{justify-content:center;height:32px}
 .hint{font-size:12px;color:var(--muted);margin:0}
+.transport-list{margin:0;border-top:1px solid var(--rule)}
+.transport-list>div{display:grid;grid-template-columns:92px minmax(0,1fr);gap:12px;padding:8px 0;border-bottom:1px solid var(--rule);font-size:13px}
+.transport-list dt{font-size:12px;color:var(--muted)}
+.transport-list dd{margin:0;overflow-wrap:anywhere}
 .relation-row{width:100%;display:grid;grid-template-columns:38px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:52px;padding:6px 0;border-top:1px solid var(--rule);text-align:left}
 .relation-row:last-child{border-bottom:1px solid var(--rule)}
 .relation-row:hover .rel-name{color:var(--accent)}
@@ -254,6 +260,7 @@ button.question-row:hover span{color:var(--accent)}
 .row-title-line{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px}
 .row-title{font-size:14px;font-weight:600;overflow-wrap:anywhere}
 .row-tag{font:10.5px var(--mono);letter-spacing:.8px;color:var(--muted);border:1px solid var(--rule);border-radius:3px;padding:0 5px;text-transform:uppercase}
+.row-meta{font:11.5px var(--mono);color:var(--ink-2);overflow-wrap:anywhere}
 .row-detail{font-size:13px;color:var(--ink-2);line-height:1.55;overflow-wrap:anywhere}
 .row-action{font-size:12.5px;color:var(--accent);white-space:nowrap;padding-top:1px}
 button.data-row:hover{background:var(--surface)}
@@ -342,6 +349,19 @@ mark{background:var(--mark);color:var(--accent-strong);border-radius:2px;padding
 .edge-label[data-status=failed]{fill:var(--rose)}
 .edge-label[data-on=true]{font-weight:600}
 .edge-label[data-on=true]:not([data-status=unresolved],[data-status=failed]){fill:var(--accent-strong)}
+/* Flow: beads travelling along the authored direction. The line underneath keeps its evidence style. */
+.edge-flow{fill:none;stroke:var(--accent);stroke-width:3.2;stroke-linecap:round;stroke-dasharray:.1 13;display:none;pointer-events:none}
+.graph-edge[data-status=unresolved] .edge-flow{stroke:var(--amber)}
+.graph-edge[data-status=failed] .edge-flow{stroke:var(--rose)}
+.graph-edge:is([data-selected=true],[data-near=true],[data-traced=true]) .edge-flow{stroke:var(--canvas);stroke-width:1.4}
+.graph-edge:is([data-selected=true],[data-near=true],[data-traced=true]) .edge-flow,.flow-all .graph-edge:not([data-dim=true]) .edge-flow{display:inline}
+.flow-off .edge-flow{display:none!important}
+@media(prefers-reduced-motion:no-preference){.edge-flow{animation:edge-flow 1s linear infinite}}
+@media(prefers-reduced-motion:reduce){.edge-flow{display:none!important}}
+@keyframes edge-flow{to{stroke-dashoffset:-13.1}}
+.edge-transport{font:10.5px var(--mono);letter-spacing:.2px;fill:var(--ink-2);paint-order:stroke;stroke:var(--canvas);stroke-width:6;stroke-linejoin:round;pointer-events:none}
+.edge-transport[data-on=true]{fill:var(--accent-strong)}
+.edge-transport[data-dim=true]{opacity:.22}
 .arrow-fill{fill:var(--strong-rule)}.arrow-accent{fill:var(--accent)}.arrow-amber{fill:var(--amber)}.arrow-rose{fill:var(--rose)}
 .sheet-label{font:10.5px var(--mono);letter-spacing:1.6px;fill:var(--muted)}
 
@@ -396,7 +416,7 @@ mark{background:var(--mark);color:var(--accent-strong);border-radius:2px;padding
   .filters{flex-wrap:nowrap;overflow-x:auto;padding:10px 12px 4px;scrollbar-width:none}
   .filters .mono-label{display:none}
   .chip{height:32px;flex:none}
-  .minimap,.canvas-tools #shortcuts-open,.canvas-tools .tool-rule:last-of-type,.focus-tool span{display:none}
+  .minimap,.canvas-tools #shortcuts-open,.canvas-tools .tool-rule:last-of-type,.focus-tool span,.flow-tool span{display:none}
   .canvas-tools{left:auto;right:12px;bottom:12px;height:44px}
   .canvas-tools button{height:42px;min-width:42px}
   .resize-handle{display:none}
