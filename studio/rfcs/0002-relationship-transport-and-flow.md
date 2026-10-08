@@ -21,7 +21,7 @@ Model. An edge may carry `transport` with any of:
 - `call`: the specific endpoint, API or system call (for example `POST /v1/requests`, `DeviceIoControl(IOCTL_EXAMPLE)`, `read(2)`).
 - `attributes`: up to 20 `{name, value}` text pairs for anything else.
 
-Text fields are non-empty and at most 500 characters (attribute values 2000). At least one field must be present, and unknown fields are rejected so later additions are deliberate. Values remain JSON-01 interchange data: a port is a JSON integer, never a string. `studio/model.mjs` is the single validator; the Python packager defers to it through `validate-model.mjs` and copies the field unchanged.
+Text fields are non-empty and at most 500 characters (attribute values 2000). At least one field must be present, and unknown fields are rejected, in the transport object and in each attribute, so later additions are deliberate. Transport is read only from the evidence record: when importing a packet, architecture candidates contribute routing geometry and nothing else. Values remain JSON-01 interchange data: a port is a JSON integer, never a string. `studio/model.mjs` is the single validator; the Python packager defers to it through `validate-model.mjs` and copies the field unchanged.
 
 Evidence. Transport is part of the authored relationship and shares its evidence status. It is not a packet capture or runtime observation (EVIDENCE-01, CLAIM-01). The inspector says so under the Transport section.
 
@@ -43,4 +43,4 @@ Pending: manual screen-reader review of the Transport section and Flow control (
 
 ## Exceptions and re-evaluation
 
-The on-line chip shortens long mechanism text to 18 characters with an ellipsis; the full value is always available in the inspector, rows and search. Re-evaluate if readers need protocol on the line, or if animation cost on very dense diagrams with Flow set to every connection becomes noticeable.
+The on-line chip shortens long mechanism text to 18 user-perceived characters with an ellipsis, never splitting a surrogate pair or combining sequence; the full value is always available in the inspector, rows and search. Re-evaluate if readers need protocol on the line, or if animation cost on very dense diagrams with Flow set to every connection becomes noticeable.

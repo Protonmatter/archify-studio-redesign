@@ -354,7 +354,7 @@ mark{background:var(--mark);color:var(--accent-strong);border-radius:2px;padding
 .graph-edge[data-status=unresolved] .edge-flow{stroke:var(--amber)}
 .graph-edge[data-status=failed] .edge-flow{stroke:var(--rose)}
 .graph-edge:is([data-selected=true],[data-near=true],[data-traced=true]) .edge-flow{stroke:var(--canvas);stroke-width:1.4}
-.graph-edge:is([data-selected=true],[data-near=true],[data-traced=true]) .edge-flow,.flow-all .graph-edge:not([data-dim=true]) .edge-flow{display:inline}
+.graph-edge:is([data-selected=true],[data-near=true],[data-traced=true]) .edge-flow,.flow-all .graph-edge .edge-flow{display:inline}
 .flow-off .edge-flow{display:none!important}
 @media(prefers-reduced-motion:no-preference){.edge-flow{animation:edge-flow 1s linear infinite}}
 @media(prefers-reduced-motion:reduce){.edge-flow{display:none!important}}

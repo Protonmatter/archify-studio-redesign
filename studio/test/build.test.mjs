@@ -38,6 +38,20 @@ test('atlas import binds indexed references, verifies hashes and preserves expli
     fs.writeFileSync(path.join(root,raw),'changed');assert.throws(()=>importAtlas(root),/hash mismatch/);
   }finally{cleanup(root);}
 });
+test('candidate connections contribute geometry only, never evidence claims',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-claims-'));
+  try{
+    const model=exampleAtlas(),r=model.routes[0],contents=model.sources[0].text;fs.writeFileSync(path.join(root,'source.txt'),contents);
+    const source={...model.sources[0],raw:'source.txt',href:'source.html',sha256:createHash('sha256').update(contents).digest('hex')};
+    const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height]})),
+      connections:r.edges.map(e=>({id:e.id,from:e.from,to:e.to,label:e.label,route:'orthogonal-h',transport:{mechanism:'Injected',port:1},detail:'Candidate-only claim',status:'observed'}))};
+    fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
+    const edges=r.edges.map(({transport,detail,...e})=>e);
+    fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify({routes:[{...r,edges,candidate:'candidate.json'}],sources:[source],terms:[]}));
+    const imported=importAtlas(root).routes[0].edges[0];
+    assert.equal(imported.route,'orthogonal-h');assert.equal(imported.transport,undefined);assert.equal(imported.detail,undefined);assert.equal(imported.status,r.edges[0].status);
+  }finally{cleanup(root);}
+});
 test('an external directory link cannot expose files outside an atlas',()=>{
   const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-link-')),outside=fs.mkdtempSync(path.join(os.tmpdir(),'studio-outside-'));
   try{fs.writeFileSync(path.join(outside,'secret.txt'),'outside');fs.symlinkSync(outside,path.join(root,'linked'),process.platform==='win32'?'junction':'dir');assert.throws(()=>safeInput(root,'linked/secret.txt'),/escapes/);}finally{cleanup(root);cleanup(outside);}

@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateModel, encodeState, decodeState, transitionState, search, gaps, connected, transportSummary } from '../model.mjs';
+import { validateModel, encodeState, decodeState, transitionState, search, gaps, connected, transportSummary, transportChip } from '../model.mjs';
 
 const data = { title:'Example', routes:[{ id:'r1', title:'First', group:'System', summary:'', nodes:[{id:'a',label:'API',status:'documented',symbols:['ReadAPI'],x:0,y:0,width:220,height:88},{id:'b',label:'Database',status:'unresolved',symbols:[],x:400,y:0,width:220,height:88}],edges:[{id:'e',from:'a',to:'b',label:'query',status:'unresolved'}],unknowns:['Missing reference'] },{id:'r2',title:'Second',group:'System',summary:'',nodes:[{id:'a',label:'ReadAPI metrics',status:'static',symbols:[],x:0,y:0,width:220,height:88}],edges:[],unknowns:[]}],sources:[],terms:[] };
 test('valid model and repeated node identifiers across routes',()=>assert.equal(validateModel(structuredClone(data)).routes.length,2));
@@ -25,10 +25,14 @@ test('relationship transport is validated and summarized',()=>{
   const with_=t=>{const d=structuredClone(data);d.routes[0].edges[0].transport=t;return d;};
   assert.equal(validateModel(with_({mechanism:'IOCTL',call:'DeviceIoControl(IOCTL_EXAMPLE)'})).routes[0].edges[0].transport.mechanism,'IOCTL');
   validateModel(with_({mechanism:'HTTPS',port:0,attributes:[{name:'TLS',value:'1.3'}]}));validateModel(with_({port:65535}));
-  for(const t of [{},[],'HTTPS',{mechanism:''},{mechanism:'  '},{protocol:7},{port:65536},{port:-1},{port:4.5},{port:'443'},{call:'x',surprise:true},{attributes:[{name:'a'}]},{attributes:{}},{attributes:[{name:' ',value:'TLS'}]},{attributes:[{name:'TLS',value:''}]}])assert.throws(()=>validateModel(with_(t)),undefined,JSON.stringify(t));
+  for(const t of [{},[],'HTTPS',{mechanism:''},{mechanism:'  '},{protocol:7},{port:65536},{port:-1},{port:4.5},{port:'443'},{call:'x',surprise:true},{attributes:[{name:'a'}]},{attributes:{}},{attributes:[{name:' ',value:'TLS'}]},{attributes:[{name:'TLS',value:''}]},{attributes:[{name:'TLS',value:'1.3',runtimeVerified:true}]},{attributes:[{name:'n'.repeat(501),value:'v'}]}])assert.throws(()=>validateModel(with_(t)),undefined,JSON.stringify(t));
   assert.equal(transportSummary({mechanism:'HTTPS',protocol:'HTTP/1.1',port:443,call:'POST /v1/requests'}),'HTTPS · HTTP/1.1 :443 · POST /v1/requests');
   assert.equal(transportSummary({mechanism:'syscall',call:'read(2)'}),'syscall · read(2)');
   assert.equal(transportSummary({port:22}),':22');assert.equal(transportSummary(undefined),'');
+  validateModel(with_({attributes:[{name:'n'.repeat(500),value:'v'}]}));
+  assert.equal(transportChip({mechanism:'1234567890123456\u{1F600}XY'}),'1234567890123456\u{1F600}…');
+  assert.equal(transportChip({mechanism:'abcdefghijklmnope\u0301XY'}),'abcdefghijklmnope\u0301…');
+  assert.equal(transportChip({mechanism:'HTTPS',port:443}),'HTTPS :443');
 });
 test('search finds relationships by transport, including attributes',()=>{
   const d=structuredClone(data);d.routes[0].edges[0].transport={mechanism:'IOCTL',call:'DeviceIoControl',attributes:[{name:'Device',value:'QcomFwDevice'}]};

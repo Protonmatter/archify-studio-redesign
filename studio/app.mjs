@@ -314,7 +314,7 @@ function renderItem(box,r,item,type){
       const outgoing=e.from===item.id,other=r.nodes.find(n=>n.id===(outgoing?e.to:e.from)),b=html('button',undefined,'relation-row');
       const copy=html('span',undefined,'rel-copy');copy.append(html('span',other.label,'rel-name'),html('span',e.label+(e.transport?' · '+transportChip(e.transport):''),'rel-label'));
       const status=html('span',undefined,'rel-status');status.dataset.status=e.status;status.append(glyph(e.status),statusLabel(e.status));
-      b.append(html('span',outgoing?'OUT':'IN','rel-dir'),copy,status);b.setAttribute('aria-label',`${outgoing?'Outgoing to':'Incoming from'} ${other.label}: ${e.label}, ${statusLabel(e.status)}`);b.onclick=()=>select('edge',e.id);list.append(b);
+      b.append(html('span',outgoing?'OUT':'IN','rel-dir'),copy,status);b.setAttribute('aria-label',`${outgoing?'Outgoing to':'Incoming from'} ${other.label}: ${e.label}${e.transport?' · '+transportChip(e.transport):''}, ${statusLabel(e.status)}`);b.onclick=()=>select('edge',e.id);list.append(b);
     }
     box.append(section(`Connections · ${related.length}`,related.length?list:html('p','No authored relationships.','hint')));
   }else{

@@ -5,7 +5,12 @@ export const TRANSPORT_FIELDS = ['mechanism','protocol','port','call','attribute
 /** One-line description of how a relationship crosses its boundary, e.g. "HTTPS :443 · POST /v1/requests". */
 export function transportSummary(t){if(!t)return '';const head=[t.mechanism,t.protocol&&t.protocol!==t.mechanism?t.protocol:''].filter(Boolean).join(' · ')+(t.port!==undefined?` :${t.port}`:'');return [head.trim(),t.call].filter(Boolean).join(' · ');}
 /** The on-line chip: mechanism and port only, so it fits between components. Never replaces the label. */
-export function transportChip(t){if(!t)return '';const head=t.mechanism||t.protocol||t.call||'';const text=[head,t.port!==undefined?':'+t.port:''].filter(Boolean).join(' ');return text.length>18?text.slice(0,17)+'…':text;}
+export function transportChip(t){
+  if(!t)return '';const head=t.mechanism||t.protocol||t.call||'';const text=[head,t.port!==undefined?':'+t.port:''].filter(Boolean).join(' ');
+  /* Shorten on whole user-perceived characters so a surrogate pair or combining sequence is never split. */
+  const chars=typeof Intl!=='undefined'&&Intl.Segmenter?Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text),s=>s.segment):Array.from(text);
+  return chars.length>18?chars.slice(0,17).join('')+'…':text;
+}
 /** Approximate extent of a connection's label and chip around labelX/labelY (11.5px monospace is about 7px a character). */
 export function edgeTextHalfWidth(e){return Math.max(e.label.length,transportChip(e.transport).length)*3.6;}
 export function edgeTextBelow(e){return e.transport?28:6;}
@@ -72,7 +77,7 @@ export function validateModel(data) {
         for(const key of Object.keys(t))if(!TRANSPORT_FIELDS.includes(key))throw new Error(`Unknown transport field ${key}`);
         for(const key of ['mechanism','protocol','call'])if(t[key]!==undefined){text(t[key],`transport ${key}`,500);if(!t[key].trim())throw new Error(`Empty transport ${key}`);}
         if(t.port!==undefined&&!(Number.isSafeInteger(t.port)&&t.port>=0&&t.port<=65535))throw new Error('Transport port must be an integer from 0 to 65535');
-        for(const a of list(t.attributes||[],'transport attributes',20)){if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('Invalid transport attribute');text(a.name,'transport attribute name',200);text(a.value,'transport attribute value',2000);if(!a.name.trim()||!a.value.trim())throw new Error('Empty transport attribute');}
+        for(const a of list(t.attributes||[],'transport attributes',20)){if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('Invalid transport attribute');for(const key of Object.keys(a))if(key!=='name'&&key!=='value')throw new Error(`Unknown transport attribute field ${key}`);text(a.name,'transport attribute name',500);text(a.value,'transport attribute value',2000);if(!a.name.trim()||!a.value.trim())throw new Error('Empty transport attribute');}
         if(!['mechanism','protocol','port','call'].some(k=>t[k]!==undefined)&&!(t.attributes||[]).length)throw new Error('Empty relationship transport');
       }
     }

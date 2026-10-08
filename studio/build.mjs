@@ -36,6 +36,10 @@ export function prepareGeometry(data){
     r.bounds=[minX,minY,maxX-minX,maxY-minY];
   }return data;
 }
+/* Candidates supply routing geometry only. Every claim (label, status, detail, transport, sources) comes from the
+   evidence record, so a candidate can never add one. Matches the fields the Python packager writes. */
+const CANDIDATE_GEOMETRY=['via','route','fromSide','toSide','channelX','channelY','labelAt'];
+const candidateGeometry=c=>Object.fromEntries(CANDIDATE_GEOMETRY.filter(k=>c&&c[k]!==undefined).map(k=>[k,c[k]]));
 export function importAtlas(directory){
   const input=parseJSONStrict(fs.readFileSync(safeInput(directory,'atlas-data.json')));
   if(!Array.isArray(input.routes)||input.routes.length>100||!Array.isArray(input.sources)||input.sources.length>5000)throw new Error('Unsupported atlas');
@@ -46,7 +50,7 @@ export function importAtlas(directory){
     if(candidate.diagram_type!=='architecture')throw new Error('Studio currently supports architecture atlas diagrams');
     if(JSON.stringify(candidate.components.map(n=>n.id))!==JSON.stringify(r.nodes.map(n=>n.id))||JSON.stringify(candidate.connections.map(e=>[e.from,e.to,e.label]))!==JSON.stringify(r.edges.map(e=>[e.from,e.to,e.label])))throw new Error(`Diagram candidate does not match evidence topology: ${r.id}`);
     const componentMap=new Map(candidate.components.map(n=>[n.id,n]));
-    return {...r,shortTitle:r.shortTitle||r.title.split(':')[0],group:r.group||(r.id==='overview'?'START HERE':r.id.startsWith('windows')?'WINDOWS INTERFACES':['sdk','ownership-lifecycle'].includes(r.id)?'APPLICATION INTEGRATION':'FIRMWARE & TRANSPORT'),nodes:r.nodes.map(n=>{const c=componentMap.get(n.id);if(!c)throw new Error(`Missing component ${n.id}`);return {...n,x:c.pos[0],y:c.pos[1],width:c.size[0],height:Math.max(c.size[1],84),sublabel:c.sublabel};}),edges:r.edges.map((e,i)=>({...candidate.connections[i],...e,id:candidate.connections[i]?.id||`${r.id}-edge-${i}`}))};
+    return {...r,shortTitle:r.shortTitle||r.title.split(':')[0],group:r.group||(r.id==='overview'?'START HERE':r.id.startsWith('windows')?'WINDOWS INTERFACES':['sdk','ownership-lifecycle'].includes(r.id)?'APPLICATION INTEGRATION':'FIRMWARE & TRANSPORT'),nodes:r.nodes.map(n=>{const c=componentMap.get(n.id);if(!c)throw new Error(`Missing component ${n.id}`);return {...n,x:c.pos[0],y:c.pos[1],width:c.size[0],height:Math.max(c.size[1],84),sublabel:c.sublabel};}),edges:r.edges.map((e,i)=>({...candidateGeometry(candidate.connections[i]),...e,id:candidate.connections[i]?.id||`${r.id}-edge-${i}`}))};
   });
   const groupOrder=['START HERE','WINDOWS INTERFACES','FIRMWARE & TRANSPORT','APPLICATION INTEGRATION'];
   routes.sort((a,b)=>groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group));
