@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {createRouter} from '../archify/renderers/architecture/routing.mjs';
-import {validateModel} from './model.mjs';
+import {validateModel,edgeTextHalfWidth,edgeTextBelow} from './model.mjs';
 import {exampleAtlas} from './example.mjs';
 import {parseJSONStrict} from './json-input.mjs';
 
@@ -27,9 +27,13 @@ export function prepareGeometry(data){
       let best=0;for(let i=1;i<e.points.length;i++){const a=e.points[i-1],b=e.points[i];const len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len>best){best=len;e.labelX=(a[0]+b[0])/2;e.labelY=(a[1]+b[1])/2-10;}}
     }
     const points=r.edges.flatMap(e=>e.points);
-    const minX=Math.min(...r.nodes.map(n=>n.x),...points.map(p=>p[0]))-45;
-    const minY=Math.min(...r.nodes.map(n=>n.y),...points.map(p=>p[1]))-65;
-    r.bounds=[minX,minY,Math.max(...r.nodes.map(n=>n.x+n.width),...points.map(p=>p[0]))-minX+45,Math.max(...r.nodes.map(n=>n.y+n.height),...points.map(p=>p[1]))-minY+65];
+    /* Labels and transport chips are drawn around labelX/labelY and can reach past the geometry margin. */
+    const text=r.edges.filter(e=>Number.isFinite(e.labelX)).map(e=>{const half=edgeTextHalfWidth(e);return [e.labelX-half-8,e.labelY-22,e.labelX+half+8,e.labelY+edgeTextBelow(e)+8];});
+    const minX=Math.min(Math.min(...r.nodes.map(n=>n.x),...points.map(p=>p[0]))-45,...text.map(t=>t[0]));
+    const minY=Math.min(Math.min(...r.nodes.map(n=>n.y),...points.map(p=>p[1]))-65,...text.map(t=>t[1]));
+    const maxX=Math.max(Math.max(...r.nodes.map(n=>n.x+n.width),...points.map(p=>p[0]))+45,...text.map(t=>t[2]));
+    const maxY=Math.max(Math.max(...r.nodes.map(n=>n.y+n.height),...points.map(p=>p[1]))+65,...text.map(t=>t[3]));
+    r.bounds=[minX,minY,maxX-minX,maxY-minY];
   }return data;
 }
 export function importAtlas(directory){

@@ -1,4 +1,4 @@
-import {STATUSES,VIEWS,validateModel,encodeState,decodeState,transitionState,search,gaps,connected,scopedSources,transportSummary} from './model.mjs';
+import {STATUSES,VIEWS,validateModel,encodeState,decodeState,transitionState,search,gaps,connected,scopedSources,transportSummary,transportText,transportChip,edgeTextHalfWidth,edgeTextBelow} from './model.mjs';
 
 /* This module is assembled inline by build.mjs; all content remains on device. */
 const originalHTML='<!doctype html>\n'+document.documentElement.outerHTML;
@@ -26,8 +26,6 @@ const body=document.body;
 /* Evidence vocabulary: each state has a label, a glyph shape and a line style. */
 const STATUS_LABELS={observed:'Observed',static:'Static analysis',documented:'Documented','software-tested':'Software tested',unresolved:'Unresolved',failed:'Failed'};
 const statusLabel=s=>STATUS_LABELS[s]||s;
-/* The on-line chip names the mechanism and port only, so it fits between components; it never replaces the label. */
-const transportChip=t=>{if(!t)return '';const head=t.mechanism||t.protocol||t.call||'';const text=[head,t.port!==undefined?':'+t.port:''].filter(Boolean).join(' ');return text.length>18?text.slice(0,17)+'…':text;};
 const isOpen=s=>s==='unresolved'||s==='failed';
 function glyphShapes(status){
   if(status==='observed')return [svg('circle',{cx:5,cy:5,r:4,fill:'currentColor'})];
@@ -166,9 +164,6 @@ function updateCamera(save=true){
 }
 function zoom(factor){getCamera().zoom=Math.max(.5,Math.min(4,getCamera().zoom*factor));updateCamera();}
 function fit(){const[x,y,w,h]=route().bounds;cameras.set(state.route,{x:x+w/2,y:y+h/2,zoom:1});updateCamera();}
-/* Approximate extent of a connection's text at its label position (11.5px monospace is about 7px a character). */
-const edgeTextHalfWidth=e=>Math.max(e.label.length,transportChip(e.transport).length)*3.6;
-const edgeTextBelow=e=>e.transport?28:6;
 function focusSelection(notify=true){
   const r=route();let ids=[];
   if(state.selectionType==='node'&&state.selected)ids=[...(trace?connected(r,state.selected,trace):new Set([state.selected,...r.edges.flatMap(e=>e.from===state.selected?[e.to]:e.to===state.selected?[e.from]:[])]))];
@@ -376,7 +371,7 @@ function renderList(){
     results.replaceChildren();const q=state.query.toLowerCase();let count=0;
     const groupHead=(rr,n)=>{if(!n)return;const h=html('div',undefined,'group-head');h.append(html('span',`${num(data.routes.indexOf(rr))} · ${rr.title.toUpperCase()}`),html('span',String(n)));return h;};
     if(state.view==='relationships')for(const rr of routes){
-      const rows=rr.edges.filter(e=>state.filter==='all'||e.status===state.filter).map(e=>({e,a:rr.nodes.find(n=>n.id===e.from),b:rr.nodes.find(n=>n.id===e.to)})).filter(({e,a,b})=>(a.label+' '+b.label+' '+e.label+' '+(e.detail||'')).toLowerCase().includes(q));
+      const rows=rr.edges.filter(e=>state.filter==='all'||e.status===state.filter).map(e=>({e,a:rr.nodes.find(n=>n.id===e.from),b:rr.nodes.find(n=>n.id===e.to)})).filter(({e,a,b})=>[a.label,b.label,e.label,e.detail||'',transportText(e.transport)].join(' ').toLowerCase().includes(q));
       if(rows.length){results.append(groupHead(rr,rows.length));count+=rows.length;}
       for(const{e,a,b}of rows)results.append(dataRow({status:e.status,title:`${a.label} → ${b.label}`,tag:e.label,meta:transportSummary(e.transport),detail:e.detail,action:()=>showOnDiagram('edge',e.id,rr.id),active:state.selected===e.id&&state.route===rr.id}));
     }
@@ -428,6 +423,7 @@ function resultCopy(item,q){
     const summary=transportSummary(e.transport);
     if(!titleHit&&e.detail?.toLowerCase().includes(q)){sub.append('Matched in description: ');highlightInto(sub,snippet(e.detail,q),q);sub.append(' · ');}
     else if(!titleHit&&summary.toLowerCase().includes(q))sub.append('Transport ',highlightInto(html('span',undefined,'code'),summary,q),' · ');
+    else if(!titleHit){const attr=(e.transport?.attributes||[]).find(a=>`${a.name} ${a.value}`.toLowerCase().includes(q));if(attr)sub.append('Transport ',highlightInto(html('span',undefined,'code'),`${attr.name}: ${attr.value}`,q),' · ');}
     sub.append(`${name(e.from)} → ${name(e.to)} · ${item.routeTitle}`);
   }else{
     const source=data.sources.find(s=>s.id===item.id);
@@ -494,14 +490,15 @@ const reducedMotion=matchMedia('(prefers-reduced-motion: reduce)');
    stop the motion (WCAG 2.2.2), and reduced motion removes it. Flow shows authored direction, not observed traffic. */
 const FLOW_MODES=['selection','all','off'],FLOW_TEXT={selection:'Flow: selection',all:'Flow: all',off:'Flow: off'};
 let flowMode='selection';
-function setFlow(mode,save=true){
-  flowMode=mode;body.classList.toggle('flow-all',mode==='all');body.classList.toggle('flow-off',mode==='off');
-  const b=$('flow-toggle');b.dataset.mode=mode;b.querySelector('span').textContent=FLOW_TEXT[mode];
-  b.setAttribute('aria-label',`Flow animation: ${mode==='selection'?'on for the selection':mode==='all'?'on for every connection':'off'}. Activate to change.`);
-  if(save)storage.set('flow',mode);
+/* The control reports what is rendered: reduced motion turns flow off whatever the chosen mode. */
+function renderFlowControl(){
+  const b=$('flow-toggle'),reduced=reducedMotion.matches,mode=reduced?'off':flowMode;
+  b.disabled=reduced;b.dataset.mode=mode;b.querySelector('span').textContent=FLOW_TEXT[mode];
+  b.setAttribute('aria-label',reduced?'Flow animation: off because your system asks for reduced motion.':`Flow animation: ${mode==='selection'?'on for the selection':mode==='all'?'on for every connection':'off'}. Activate to change.`);
+  b.title=reduced?'Flow animation is off because your system asks for reduced motion.':'Animate the authored direction of connections. This is not observed traffic.';
 }
-function syncMotion(){const off=reducedMotion.matches;$('flow-toggle').disabled=off;$('flow-toggle').title=off?'Flow animation is off because your system asks for reduced motion.':'Animate the authored direction of connections. This is not observed traffic.';}
-setFlow(storage.get('flow','selection',v=>FLOW_MODES.includes(v)),false);syncMotion();reducedMotion.addEventListener('change',syncMotion);
+function setFlow(mode,save=true){flowMode=mode;body.classList.toggle('flow-all',mode==='all');body.classList.toggle('flow-off',mode==='off');if(save)storage.set('flow',mode);renderFlowControl();}
+setFlow(storage.get('flow','selection',v=>FLOW_MODES.includes(v)),false);reducedMotion.addEventListener('change',renderFlowControl);
 $('flow-toggle').onclick=()=>setFlow(FLOW_MODES[(FLOW_MODES.indexOf(flowMode)+1)%FLOW_MODES.length]);
 $('search-open').onclick=openSearch;$('search-input').oninput=performSearch;
 for(const b of document.querySelectorAll('[data-search-scope]'))b.onclick=()=>{searchScope=b.dataset.searchScope;performSearch();$('search-input').focus();};
@@ -555,7 +552,8 @@ canvas.addEventListener('wheel',e=>{
   const c=getCamera();c.x+=e.deltaX/matrix.a;c.y+=e.deltaY/matrix.a;updateCamera();
 },{passive:false});
 let mapDrag=false;const minimap=$('minimap');
-const mapMove=e=>{const m=minimap.getScreenCTM();if(!m)return;const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse());const c=getCamera();c.x=p.x;c.y=p.y;updateCamera(false);};
+/* The overview keeps the diagram's aspect ratio, so clicks in its blank margins are clamped to the diagram. */
+const mapMove=e=>{const m=minimap.getScreenCTM();if(!m)return;const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse()),b=route().bounds,c=getCamera();c.x=Math.min(b[0]+b[2],Math.max(b[0],p.x));c.y=Math.min(b[1]+b[3],Math.max(b[1],p.y));updateCamera(false);};
 minimap.onpointerdown=e=>{mapDrag=true;minimap.setPointerCapture(e.pointerId);mapMove(e);};minimap.onpointermove=e=>{if(mapDrag)mapMove(e);};minimap.onpointerup=minimap.onpointercancel=()=>{mapDrag=false;updateCamera();};
 let resizing=false;const resizeHandle=$('resize-handle');function sizePanel(value){const width=Math.max(280,Math.min(560,value,innerWidth*.45));document.documentElement.style.setProperty('--panel-width',width+'px');storage.set('panelWidth',width);}
 if('ResizeObserver' in window)new ResizeObserver(([entry])=>{const width=Math.round(entry.contentRect.width+parseFloat(getComputedStyle($('inspector')).paddingLeft)+parseFloat(getComputedStyle($('inspector')).paddingRight));if(width>0)resizeHandle.setAttribute('aria-valuenow',String(width));}).observe($('inspector'));

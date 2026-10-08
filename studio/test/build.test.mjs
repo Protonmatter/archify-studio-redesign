@@ -10,6 +10,16 @@ test('inline data cannot terminate script tags',()=>{const value={x:'</script><i
 test('source traversal and absolute paths are refused',()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-path-'));try{fs.writeFileSync(path.join(root,'a.txt'),'safe');assert.equal(safeInput(root,'a.txt'),path.join(root,'a.txt'));for(const p of ['../escape','/etc/passwd','https://example.com','C:\\secret'])assert.throws(()=>safeInput(root,p));}finally{fs.rmSync(root,{recursive:true,force:true});}});
 test('routing is deterministic and every edge has finite geometry',()=>{const a=prepareGeometry(exampleAtlas()),b=prepareGeometry(exampleAtlas());assert.deepEqual(a,b);for(const r of a.routes)for(const e of r.edges){assert(e.d.startsWith('M'));assert(e.points.length>=2);assert(e.points.flat().every(Number.isFinite));assert(r.bounds.every(Number.isFinite));}});
 test('portable document root contains the license for browser re-export',()=>{const result=buildHTML(exampleAtlas());const root=result.slice(result.indexOf('<html'));assert(root.includes('Permission is hereby granted'));assert(root.includes('Copyright (c) 2026 tt-a1i'));});
+test('diagram bounds include connection labels and transport chips on exterior channels',()=>{
+  /* The exterior vertical run is the longest segment, so the label sits on it, outside every node and route point. */
+  const data=exampleAtlas(),r=data.routes[1];
+  r.nodes=[{id:'a',label:'Upper',kind:'Endpoint',status:'documented',x:0,y:0,width:222,height:90,symbols:[],sources:[]},{id:'b',label:'Lower',kind:'Endpoint',status:'documented',x:0,y:1000,width:222,height:90,symbols:[],sources:[]}];
+  r.edges=[{id:'outside',from:'a',to:'b',label:'A deliberately long relationship label',status:'documented',fromSide:'left',toSide:'left',via:[[-60,45],[-60,1045]],transport:{mechanism:'Shared memory ring',port:0},sources:[]}];
+  const route=prepareGeometry(data).routes[1],e=route.edges[0],half=e.label.length*3.6;
+  assert(Math.abs(e.labelX+60)<1,`label expected on the exterior run, got x=${e.labelX}`);
+  assert(route.bounds[0]<=e.labelX-half,`left bound ${route.bounds[0]} clips the label, which starts at ${e.labelX-half}`);
+  assert(route.bounds[1]+route.bounds[3]>=e.labelY+28,'bottom bound clips the transport chip');
+});
 test('malformed and extreme edge waypoints fail before routing',()=>{for(const via of [[['garbage',100]],[[1e200,100]],[[1,2,3]]]){const data=exampleAtlas();data.routes[0].edges[0].via=via;assert.throws(()=>prepareGeometry(data));}});
 function cleanup(root){assert.equal(path.dirname(path.resolve(root)),path.resolve(os.tmpdir()));assert(path.basename(root).startsWith('studio-'));fs.rmSync(root,{recursive:true,force:true});}
 test('atlas import binds indexed references, verifies hashes and preserves explicit routing',()=>{

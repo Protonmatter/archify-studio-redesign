@@ -25,7 +25,7 @@ test('relationship transport is validated and summarized',()=>{
   const with_=t=>{const d=structuredClone(data);d.routes[0].edges[0].transport=t;return d;};
   assert.equal(validateModel(with_({mechanism:'IOCTL',call:'DeviceIoControl(IOCTL_EXAMPLE)'})).routes[0].edges[0].transport.mechanism,'IOCTL');
   validateModel(with_({mechanism:'HTTPS',port:0,attributes:[{name:'TLS',value:'1.3'}]}));validateModel(with_({port:65535}));
-  for(const t of [{},[],'HTTPS',{mechanism:''},{mechanism:'  '},{protocol:7},{port:65536},{port:-1},{port:4.5},{port:'443'},{call:'x',surprise:true},{attributes:[{name:'a'}]},{attributes:{}}])assert.throws(()=>validateModel(with_(t)),undefined,JSON.stringify(t));
+  for(const t of [{},[],'HTTPS',{mechanism:''},{mechanism:'  '},{protocol:7},{port:65536},{port:-1},{port:4.5},{port:'443'},{call:'x',surprise:true},{attributes:[{name:'a'}]},{attributes:{}},{attributes:[{name:' ',value:'TLS'}]},{attributes:[{name:'TLS',value:''}]}])assert.throws(()=>validateModel(with_(t)),undefined,JSON.stringify(t));
   assert.equal(transportSummary({mechanism:'HTTPS',protocol:'HTTP/1.1',port:443,call:'POST /v1/requests'}),'HTTPS · HTTP/1.1 :443 · POST /v1/requests');
   assert.equal(transportSummary({mechanism:'syscall',call:'read(2)'}),'syscall · read(2)');
   assert.equal(transportSummary({port:22}),':22');assert.equal(transportSummary(undefined),'');
