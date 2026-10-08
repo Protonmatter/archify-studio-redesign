@@ -14,6 +14,7 @@ const viewQueries=new Map();
 const storage={get(key,fallback,valid=()=>true){try{const value=JSON.parse(localStorage.getItem('archify-studio:'+key));return value!==null&&valid(value)?value:fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem('archify-studio:'+key,JSON.stringify(value));}catch{/* Viewer remains usable when storage is unavailable. */}}};
 const collapsedGroups=new Set(storage.get('collapsedGroups',[],v=>Array.isArray(v)&&v.every(g=>typeof g==='string')));
 const isTheme=v=>v==='paper'||v==='ink';
+let directoryRoute='';
 const route=()=>data.routes.find(r=>r.id===state.route);
 const num=i=>String(i+1).padStart(2,'0');
 const isSmall=()=>matchMedia('(max-width:700px)').matches;
@@ -26,7 +27,7 @@ const statusLabel=s=>STATUS_LABELS[s]||s;
 const isOpen=s=>s==='unresolved'||s==='failed';
 function glyphShapes(status){
   if(status==='observed')return [svg('circle',{cx:5,cy:5,r:4,fill:'currentColor'})];
-  if(status==='software-tested')return [svg('rect',{x:1,y:1,width:8,height:8,fill:'currentColor'}),svg('path',{d:'M2.8 5.2 L4.4 6.8 L7.3 3.6',fill:'none','stroke-width':1.3,style:'stroke:var(--canvas)'})];
+  if(status==='software-tested')return [svg('path',{d:'M1 1H9V9H1Z M2.34 5.66 L4.4 7.72 L7.78 4.04 L6.82 3.16 L4.4 5.88 L3.26 4.74 Z',fill:'currentColor','fill-rule':'evenodd'})];
   if(status==='static')return [svg('path',{d:'M5 1 L9 5 L5 9 L1 5 Z',fill:'none',stroke:'currentColor','stroke-width':1.4})];
   if(status==='unresolved')return [svg('circle',{cx:5,cy:5,r:3.6,fill:'none',stroke:'currentColor','stroke-width':1.4,'stroke-dasharray':'2 1.6'}),svg('path',{d:'M5 1.4 A3.6 3.6 0 0 1 5 8.6 Z',fill:'currentColor'})];
   if(status==='failed')return [svg('path',{d:'M2 2 L8 8 M8 2 L2 8',fill:'none',stroke:'currentColor','stroke-width':1.6,'stroke-linecap':'round'})];
@@ -87,11 +88,12 @@ const navIsOpen=()=>isNarrow()?body.classList.contains('nav-open'):!body.classLi
 /* Directory, breadcrumb and heading */
 function renderDirectory(){
   const nav=$('routes');nav.replaceChildren();const groups=[];
+  if(directoryRoute!==state.route){directoryRoute=state.route;if(collapsedGroups.delete(route().group||''))storage.set('collapsedGroups',[...collapsedGroups]);}
   const byName=new Map();for(const r of data.routes){const name=r.group||'';if(!byName.has(name)){const g={name,routes:[]};byName.set(name,g);groups.push(g);}byName.get(name).routes.push(r);}
   for(const g of groups){
     const list=html('div',undefined,'route-list');
     if(g.name){
-      const open=!collapsedGroups.has(g.name)||g.routes.some(r=>r.id===state.route);
+      const open=!collapsedGroups.has(g.name);
       const head=html('button',undefined,'route-group');head.dataset.focusKey='group:'+g.name;head.setAttribute('aria-expanded',String(open));head.append(html('span',g.name),icon('M3 5l4 4 4-4'));list.hidden=!open;
       head.onclick=()=>{const expand=head.getAttribute('aria-expanded')!=='true';head.setAttribute('aria-expanded',String(expand));list.hidden=!expand;if(expand)collapsedGroups.delete(g.name);else collapsedGroups.add(g.name);storage.set('collapsedGroups',[...collapsedGroups]);};
       nav.append(head);
@@ -112,7 +114,7 @@ function renderHeading(){
   const crumbs=$('crumbs');crumbs.replaceChildren();
   const home=html('a',data.subtitle||data.title);home.href='#';home.onclick=e=>{e.preventDefault();navigate({route:data.routes[0].id,view:'diagram',selected:''});};
   const sep=()=>{const s=html('span','/');s.setAttribute('aria-hidden','true');return s;};
-  crumbs.append(home);if(r.group)crumbs.append(sep(),html('span',r.group.charAt(0)+r.group.slice(1).toLowerCase()));
+  crumbs.append(home);if(r.group)crumbs.append(sep(),html('span',r.group,'crumb-group'));
   const current=html('span',r.title);current.setAttribute('aria-current','page');crumbs.append(sep(),current);
   $('route-title').textContent=r.title;$('route-summary').textContent=r.summary||'';$('route-summary').hidden=!r.summary;
   $('group-name').textContent=r.group||'';$('sheet-number').textContent='FIG. '+num(index);$('provenance').textContent=r.provenance||'';

@@ -35,6 +35,7 @@ kbd{font:11px var(--mono);border:1px solid var(--rule);border-radius:3px;padding
 .mast-separator{width:1px;height:22px;background:var(--rule);flex:none}
 .crumbs{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);min-width:0;white-space:nowrap;overflow:hidden}
 .crumbs a{color:var(--muted);text-decoration:none}.crumbs a:hover{color:var(--accent);text-decoration:underline}
+.crumbs .crumb-group{font:11px var(--mono);letter-spacing:1.2px}
 .crumbs [aria-current]{color:var(--ink);font-weight:600;overflow:hidden;text-overflow:ellipsis}
 .mast-actions{margin-left:auto;display:flex;align-items:center;gap:10px;flex:none}
 .search-trigger{width:340px;height:36px;display:flex;align-items:center;gap:10px;padding:0 8px 0 12px;border:1px solid var(--field-rule);border-radius:3px;background:var(--canvas);color:var(--muted);font-size:13px;text-align:left}
