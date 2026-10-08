@@ -10,8 +10,10 @@ const svg=(tag,attrs={},text)=>{const e=document.createElementNS(NS,tag);for(con
 let state=decodeState(location.hash,data), currentRoute='', trace='', toastTimer, searchScope='all';
 const cameras=new Map();
 const viewQueries=new Map();
-const storage={get(key,fallback){try{return JSON.parse(localStorage.getItem('archify-studio:'+key))??fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem('archify-studio:'+key,JSON.stringify(value));}catch{/* Viewer remains usable when storage is unavailable. */}}};
-const collapsedGroups=new Set(storage.get('collapsedGroups',[]).filter(g=>typeof g==='string'));
+/* Saved values may come from an older version or be hand-edited, so every read is checked and falls back. */
+const storage={get(key,fallback,valid=()=>true){try{const value=JSON.parse(localStorage.getItem('archify-studio:'+key));return value!==null&&valid(value)?value:fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem('archify-studio:'+key,JSON.stringify(value));}catch{/* Viewer remains usable when storage is unavailable. */}}};
+const collapsedGroups=new Set(storage.get('collapsedGroups',[],v=>Array.isArray(v)&&v.every(g=>typeof g==='string')));
+const isTheme=v=>v==='paper'||v==='ink';
 const route=()=>data.routes.find(r=>r.id===state.route);
 const num=i=>String(i+1).padStart(2,'0');
 const isSmall=()=>matchMedia('(max-width:700px)').matches;
@@ -57,7 +59,7 @@ function select(type,id,routeId=state.route,line=undefined,{view=state.view,fram
      asked to, or when the control that had focus was replaced by the re-render. */
   requestAnimationFrame(()=>{
     if(frame)focusSelection(false);
-    if(focus||!document.activeElement||document.activeElement===body)$('diagram').querySelector(`[data-${type}="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
+    if(focus)$('diagram').querySelector(`[data-${type}="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
   });
 }
 function showOnDiagram(type,id,routeId){select(type,id,routeId,undefined,{view:'diagram',frame:true,focus:true});}
@@ -65,6 +67,13 @@ function restoreFocus(key){
   if(!key||(document.activeElement?.dataset?.focusKey===key&&document.activeElement.isConnected))return;
   const target=document.querySelector(`[data-focus-key="${CSS.escape(key)}"]`);
   if(target&&!target.disabled)target.focus({preventScroll:true});else if(key.startsWith('chip:'))document.querySelector('[data-focus-key="chip:all"]')?.focus({preventScroll:true});
+}
+const isVisible=el=>Boolean(el&&el.isConnected&&el.getClientRects().length&&getComputedStyle(el).visibility!=='hidden');
+/* When an update removes or hides the focused control, land on the closest meaningful visible place. */
+function ensureFocus(preferred){
+  const active=document.activeElement;if(active&&active!==body&&isVisible(active))return;
+  const item=state.selected&&state.view==='diagram'&&state.selectionType!=='source'?$('diagram').querySelector(`[data-${state.selectionType}="${CSS.escape(state.selected)}"]`):null;
+  for(const target of [preferred,item,$('inspector-content').querySelector('h2'),state.view==='diagram'?$('canvas'):$('list-panel').querySelector('h2'),$('workspace')])if(isVisible(target)){target.focus({preventScroll:true});return;}
 }
 function clearSelection(){body.classList.remove('sheet-open');navigate({selected:''});}
 function setNav(open){
@@ -77,7 +86,7 @@ const navIsOpen=()=>isNarrow()?body.classList.contains('nav-open'):!body.classLi
 /* Directory, breadcrumb and heading */
 function renderDirectory(){
   const nav=$('routes');nav.replaceChildren();const groups=[];
-  for(const r of data.routes){let g=groups.at(-1);if(!g||g.name!==(r.group||'')){g={name:r.group||'',routes:[]};groups.push(g);}g.routes.push(r);}
+  const byName=new Map();for(const r of data.routes){const name=r.group||'';if(!byName.has(name)){const g={name,routes:[]};byName.set(name,g);groups.push(g);}byName.get(name).routes.push(r);}
   for(const g of groups){
     const list=html('div',undefined,'route-list');
     if(g.name){
@@ -129,8 +138,8 @@ function renderFilters(box,items){
 function cameraKey(){return `${data.subtitle||data.title}:${state.route}`;}
 function getCamera(){
   if(!cameras.has(state.route)){
-    const saved=storage.get(cameraKey(),null),[x,y,w,h]=route().bounds;
-    const valid=saved&&['x','y','zoom'].every(k=>Number.isFinite(saved[k]))&&saved.zoom>=.5&&saved.zoom<=4&&Math.abs(saved.x)<100000&&Math.abs(saved.y)<100000;
+    const saved=storage.get(cameraKey(),null,c=>typeof c==='object'&&['x','y','zoom'].every(k=>Number.isFinite(c[k]))&&c.zoom>=.5&&c.zoom<=4&&Math.abs(c.x)<100000&&Math.abs(c.y)<100000),[x,y,w,h]=route().bounds;
+    const valid=Boolean(saved);
     cameras.set(state.route,valid?saved:{x:x+w/2,y:y+h/2,zoom:1});
   }return cameras.get(state.route);
 }
@@ -173,11 +182,14 @@ function renderDiagram(){
     const kind=n.sublabel||n.kind||'Component';
     const g=svg('g',{'data-node':n.id,'data-status':n.status,class:'graph-node',tabindex:0,role:'button','aria-label':`${n.label}. ${kind}. ${statusLabel(n.status)}.`});
     g.append(svg('title',{},n.label+' Â· '+statusLabel(n.status)),svg('rect',{x:n.x-3,y:n.y-3,width:n.width+6,height:n.height+6,rx:5,class:'node-halo'}),svg('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:3,class:'node-box'}),svg('rect',{x:n.x+1,y:n.y+1,width:n.width-2,height:23,rx:2,class:'node-head'}),svg('path',{d:`M${n.x} ${n.y+24} H${n.x+n.width}`,class:'node-rule'}));
-    g.append(svg('text',{x:n.x+12,y:n.y+16.5,class:'node-kind'},kind.toUpperCase().slice(0,Math.max(6,Math.floor((n.width-52)/7.4)))),svg('text',{x:n.x+n.width-12,y:n.y+16.5,class:'node-number','text-anchor':'end'},num(i)));
     const lines=wrappedLabel(n.label,Math.floor((n.width-24)/8.6));
-    const showStatus=n.height-24-lines.length*19>=27,lineHeight=Math.min(19,(n.height-(showStatus?54:32))/lines.length),fontSize=Math.min(15,lineHeight*.82);
+    /* The evidence state always shows: as a status row when the label fits above it (shrinking to 15px lines
+       first), otherwise as a glyph in the header band beside the number. */
+    const rowLineHeight=Math.min(19,(n.height-52)/lines.length),showStatus=rowLineHeight>=15,lineHeight=showStatus?rowLineHeight:Math.min(19,(n.height-32)/lines.length),fontSize=Math.min(15,lineHeight*.82);
+    g.append(svg('text',{x:n.x+12,y:n.y+16.5,class:'node-kind'},kind.toUpperCase().slice(0,Math.max(6,Math.floor((n.width-(showStatus?52:72))/7.4)))),svg('text',{x:n.x+n.width-12,y:n.y+16.5,class:'node-number','text-anchor':'end'},num(i)));
     lines.forEach((line,j)=>g.append(svg('text',{x:n.x+12,y:n.y+30+fontSize+j*lineHeight,class:'node-label',style:`font-size:${fontSize}px`},line)));
-    if(showStatus){const mark=svg('g',{class:'glyph','data-status':n.status,transform:`translate(${n.x+12} ${n.y+n.height-19.5})`});mark.append(...glyphShapes(n.status));g.append(mark,svg('text',{x:n.x+27,y:n.y+n.height-11,class:'node-status'},statusLabel(n.status)));}
+    const mark=svg('g',{class:'glyph','data-status':n.status,transform:showStatus?`translate(${n.x+12} ${n.y+n.height-19.5})`:`translate(${n.x+n.width-42} ${n.y+7})`});mark.append(...glyphShapes(n.status));g.append(mark);
+    if(showStatus)g.append(svg('text',{x:n.x+27,y:n.y+n.height-11,class:'node-status'},statusLabel(n.status)));
     g.onclick=()=>select('node',n.id);g.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();select('node',n.id);}};root.append(g);
   });
   renderMinimap();updateCamera(false);
@@ -306,6 +318,7 @@ function renderInspector(){
   const item=state.selectionType==='node'?r.nodes.find(n=>n.id===state.selected):state.selectionType==='edge'?r.edges.find(e=>e.id===state.selected):data.sources.find(s=>s.id===state.selected);
   body.classList.toggle('has-selection',Boolean(item));
   if(!item)renderBrief(box,r);else if(state.selectionType==='source')renderSource(box,item);else renderItem(box,r,item,state.selectionType);
+  box.querySelector('h2')?.setAttribute('tabindex','-1');
   box.append(html('p',data.demonstration?'Illustrative example. Evidence states describe the authored example; no production observation is claimed.':'This is a retained evidence snapshot. Rendering and navigation do not qualify hardware behavior or timing accuracy.','boundary-note'));
 }
 
@@ -320,7 +333,7 @@ function dataRow({status,title,tag,detail,action,actionLabel='Show on diagram â†
 function renderList(){
   const box=$('list-panel');box.replaceChildren();const r=route(),all=state.scope==='all',scopeText=all?'entire atlas':'this diagram';
   const titles={relationships:'Directed relationships',evidence:'The evidence library',gaps:'Questions still open'};
-  const head=html('div',undefined,'list-head'),copy=html('div'),intro=html('p','','list-intro');copy.append(html('h2',titles[state.view]),intro);
+  const head=html('div',undefined,'list-head'),copy=html('div'),intro=html('p','','list-intro');copy.append(html('h2',titles[state.view]),intro);copy.firstChild.tabIndex=-1;
   const field=html('label',undefined,'list-search');const glass=svg('svg',{viewBox:'0 0 20 20','aria-hidden':'true'});glass.append(svg('circle',{cx:8.5,cy:8.5,r:5.5}),svg('path',{d:'m13 13 4.5 4.5'}));
   const input=html('input');input.type='search';input.value=state.query;input.placeholder='Filter this view';input.setAttribute('aria-label','Filter '+titles[state.view].toLowerCase());field.append(glass,input);
   head.append(copy,field);const results=html('div');box.append(head);
@@ -353,7 +366,7 @@ function renderList(){
 }
 
 function render(){
-  const r=route(),focusKey=document.activeElement?.dataset?.focusKey;
+  const r=route(),focused=document.activeElement,focusKey=focused?.dataset?.focusKey;
   if(currentRoute!==r.id){renderDiagram();currentRoute=r.id;}
   renderDirectory();renderHeading();
   if(state.view==='diagram')renderFilters($('filters'),[...r.nodes,...r.edges]);else $('filters').replaceChildren();
@@ -361,7 +374,7 @@ function render(){
   $('map-panel').hidden=state.view!=='diagram';$('list-panel').hidden=state.view==='diagram';$('list-panel').setAttribute('aria-labelledby','tab-'+state.view);
   highlight();renderInspector();if(state.view!=='diagram')renderList();
   const open=isSmall()?body.classList.contains('sheet-open'):!body.classList.contains('no-inspector');$('inspector-toggle').setAttribute('aria-expanded',String(open));
-  restoreFocus(focusKey);
+  restoreFocus(focusKey);if(focused&&focused!==body)ensureFocus();
 }
 
 /* Search */
@@ -425,14 +438,14 @@ function setTheme(name,save=true){document.documentElement.dataset.theme=name;fo
 $('route-count').textContent=`${data.routes.length} diagram${data.routes.length===1?'':'s'}`;
 $('edition-label').textContent=data.demonstration?'REFERENCE EDITION':'LOCAL RESEARCH EDITION';
 $('dataset-note').textContent=data.demonstration?'An authored example. No live system data.':'Included evidence stays in this offline artifact.';
-const savedTheme=storage.get('theme',null);setTheme(['paper','ink'].includes(savedTheme)?savedTheme:matchMedia('(prefers-color-scheme: dark)').matches?'ink':'paper',false);
-matchMedia('(prefers-color-scheme: dark)').addEventListener('change',e=>{if(!['paper','ink'].includes(storage.get('theme',null)))setTheme(e.matches?'ink':'paper',false);});
-const savedWidth=storage.get('panelWidth',340);if(Number.isFinite(savedWidth)&&savedWidth>=280&&savedWidth<=560)document.documentElement.style.setProperty('--panel-width',savedWidth+'px');
-if(storage.get('inspector',true)===false)body.classList.add('no-inspector');
-if(storage.get('directory',true)===false&&!isNarrow())body.classList.add('nav-collapsed');
+setTheme(storage.get('theme',null,isTheme)||(matchMedia('(prefers-color-scheme: dark)').matches?'ink':'paper'),false);
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change',e=>{if(!storage.get('theme',null,isTheme))setTheme(e.matches?'ink':'paper',false);});
+document.documentElement.style.setProperty('--panel-width',storage.get('panelWidth',340,v=>Number.isFinite(v)&&v>=280&&v<=560)+'px');
+if(storage.get('inspector',true,v=>typeof v==='boolean')===false)body.classList.add('no-inspector');
+if(storage.get('directory',true,v=>typeof v==='boolean')===false&&!isNarrow())body.classList.add('nav-collapsed');
 if(state.selected&&isSmall())body.classList.add('sheet-open');
 $('nav-toggle').setAttribute('aria-expanded',String(navIsOpen()));
-for(const b of document.querySelectorAll('[data-theme-choice]'))b.onclick=()=>setTheme(isSmall()?(document.documentElement.dataset.theme==='paper'?'ink':'paper'):b.dataset.themeChoice);
+for(const b of document.querySelectorAll('[data-theme-choice]'))b.onclick=()=>{setTheme(isSmall()?(document.documentElement.dataset.theme==='paper'?'ink':'paper'):b.dataset.themeChoice);ensureFocus(document.querySelector('[data-theme-choice][aria-pressed=false]'));};
 $('home').onclick=e=>{e.preventDefault();navigate({route:data.routes[0].id,view:'diagram',selected:'',query:''});};
 $('nav-toggle').onclick=()=>setNav(!navIsOpen());$('scrim').onclick=()=>setNav(false);
 $('inspector-toggle').onclick=()=>{if(isSmall())body.classList.toggle('sheet-open');else{body.classList.toggle('no-inspector');storage.set('inspector',!body.classList.contains('no-inspector'));}render();};
@@ -451,7 +464,8 @@ $('copy-link').onclick=async()=>{try{await navigator.clipboard.writeText(locatio
 function syncFromHistory(){state=decodeState(location.hash,data);trace='';if(isSmall())body.classList.toggle('sheet-open',Boolean(state.selected));render();}
 window.addEventListener('popstate',syncFromHistory);window.addEventListener('hashchange',syncFromHistory);
 if('ResizeObserver' in window)new ResizeObserver(()=>requestAnimationFrame(updateMinimapView)).observe($('canvas'));else window.addEventListener('resize',updateMinimapView);
-window.addEventListener('resize',()=>{if(!isNarrow()){body.classList.remove('nav-open');$('scrim').hidden=true;}$('nav-toggle').setAttribute('aria-expanded',String(navIsOpen()));});
+matchMedia('(max-width:980px)').addEventListener('change',e=>{const active=document.activeElement;if(!e.matches){body.classList.remove('nav-open');$('scrim').hidden=true;}$('nav-toggle').setAttribute('aria-expanded',String(navIsOpen()));if(active&&active!==body)ensureFocus();});
+matchMedia('(max-width:700px)').addEventListener('change',e=>{const active=document.activeElement;body.classList.toggle('sheet-open',e.matches&&Boolean(state.selected));render();if(active&&active!==body)ensureFocus();});
 document.addEventListener('keydown',e=>{
   if(document.querySelector('dialog[open]')||e.ctrlKey||e.metaKey||e.altKey)return;if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
   if(e.key==='/'){e.preventDefault();openSearch();}
