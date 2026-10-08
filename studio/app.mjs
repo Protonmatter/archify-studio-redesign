@@ -8,6 +8,8 @@ const NS='http://www.w3.org/2000/svg';
 const html=(tag,text,cls)=>{const e=document.createElement(tag);if(text!==undefined)e.textContent=text;if(cls)e.className=cls;return e;};
 const svg=(tag,attrs={},text)=>{const e=document.createElementNS(NS,tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,String(v));if(text!==undefined)e.textContent=text;return e;};
 let state=decodeState(location.hash,data), currentRoute='', trace='', toastTimer, searchScope='all';
+/* Drawn elements by ID, rebuilt with each diagram, so highlighting is one linear pass on dense diagrams. */
+let diagramIndex={nodes:new Map(),edges:new Map()};
 const cameras=new Map();
 const viewQueries=new Map();
 /* Saved values may come from an older version or be hand-edited, so every read is checked and falls back. */
@@ -37,6 +39,8 @@ function glyph(status,size=10){const e=svg('svg',{class:'glyph',viewBox:'0 0 10 
 function icon(d,box=14){const e=svg('svg',{viewBox:`0 0 ${box} ${box}`,'aria-hidden':'true'});e.append(svg('path',{d}));return e;}
 const closeIcon=()=>icon('M3 3l8 8M11 3l-8 8');
 function copyIcon(){const e=svg('svg',{viewBox:'0 0 16 16','aria-hidden':'true'});e.append(svg('rect',{x:5,y:5,width:8.5,height:8.5,rx:1}),svg('path',{d:'M3 10.5V3.5a1 1 0 0 1 1-1h6.5'}));return e;}
+/* A glyph with screen-reader text, wherever the glyph is the only carrier of the evidence state. */
+function statusMark(status){const s=html('span',undefined,'status-mark');s.append(glyph(status,12),html('span',statusLabel(status)+'. ','sr-only'));return s;}
 function statusChip(s){const e=html('span',undefined,'status-chip');e.dataset.status=s;e.append(glyph(s),statusLabel(s));return e;}
 
 const announce=message=>{$('announcement').textContent=message;$('announcement').classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>$('announcement').classList.remove('visible'),3000);};
@@ -54,7 +58,7 @@ function navigate(patch,{replace=false}={}){
 function select(type,id,routeId=state.route,line=undefined,{view=state.view,frame=isSmall(),focus=false,extra={}}={}){
   const small=isSmall();body.classList.remove('no-inspector');if(small)body.classList.add('sheet-open');
   navigate({route:routeId,selected:id,selectionType:type,line,view,...extra});
-  if(view!=='diagram'||type==='source')return;
+  if(view!=='diagram'||type==='source'){if(focus)requestAnimationFrame(()=>$('inspector-content').querySelector('h2')?.focus({preventScroll:true}));return;}
   if(small)$('map-panel').scrollIntoView({block:'start'});
   /* Wait for layout so a view that just became visible has its real size. Focus moves to the item when
      asked to, or when the control that had focus was replaced by the re-render. */
@@ -101,8 +105,12 @@ function renderDirectory(){
     for(const r of g.routes){
       const b=html('button',undefined,'route-link');b.dataset.route=r.id;b.dataset.focusKey='route:'+r.id;b.setAttribute('aria-current',r.id===state.route?'page':'false');
       b.append(html('span',num(data.routes.indexOf(r)),'number'),html('span',r.shortTitle||r.title,'route-title'),html('span',`${r.nodes.length} components · ${r.edges.length} links`,'route-meta'));
-      const open=gaps(data,'route',r.id).length;
-      if(open){const mark=html('span',undefined,'route-gaps');mark.title=`${open} open question${open===1?'':'s'}`;mark.append(glyph('unresolved'),String(open),html('span',` open question${open===1?'':'s'}`,'sr-only'));b.append(mark);}
+      const open=gaps(data,'route',r.id);
+      if(open.length){
+        const mark=html('span',undefined,'route-gaps'),parts=[];
+        for(const s of ['failed','unresolved']){const count=open.filter(x=>x.status===s).length;if(!count)continue;const part=html('span',undefined,'route-gap');part.dataset.status=s;part.append(glyph(s),String(count));mark.append(part);parts.push(`${count} ${statusLabel(s).toLowerCase()}`);}
+        mark.title=`${open.length} open question${open.length===1?'':'s'}: ${parts.join(', ')}`;mark.append(html('span',` ${mark.title}`,'sr-only'));b.append(mark);
+      }
       b.onclick=()=>{navigate({route:r.id});if(isNarrow())setNav(false);};list.append(b);
     }
     nav.append(list);
@@ -170,20 +178,20 @@ function focusSelection(notify=true){
 }
 function wrappedLabel(label,max=26){if(label.length<=max)return[label];const words=label.split(/\s+/);const lines=[''];for(const word of words){if((lines.at(-1)+' '+word).trim().length>max&&lines.at(-1))lines.push(word);else lines[lines.length-1]=(lines.at(-1)+' '+word).trim();}return lines;}
 function renderDiagram(){
-  const r=route(),root=$('diagram'),name=id=>r.nodes.find(n=>n.id===id)?.label||id;root.replaceChildren();root.setAttribute('aria-label',r.title+' interactive diagram');
+  const r=route(),root=$('diagram'),labels=new Map(r.nodes.map(n=>[n.id,n.label])),name=id=>labels.get(id)||id;root.replaceChildren();diagramIndex={nodes:new Map(),edges:new Map()};root.setAttribute('aria-label',r.title+' interactive diagram');
   const defs=svg('defs');
   for(const[id,cls]of [['arrow','arrow-fill'],['arrow-accent','arrow-accent'],['arrow-amber','arrow-amber'],['arrow-rose','arrow-rose']]){const m=svg('marker',{id,markerWidth:8,markerHeight:8,refX:7,refY:4,orient:'auto',markerUnits:'userSpaceOnUse'});m.append(svg('path',{d:'M0 0 L8 4 L0 8 Z',class:cls}));defs.append(m);}
   root.append(defs);
   root.append(svg('text',{x:r.bounds[0]+45,y:Math.min(...r.nodes.map(n=>n.y))-30,class:'sheet-label'},'DIRECTED SYSTEM MAP · FIG. '+num(data.routes.indexOf(r))));
   r.edges.forEach(e=>{
-    const g=svg('g',{'data-edge':e.id,'data-status':e.status,class:'graph-edge',tabindex:0,role:'button','aria-label':`${e.label}: ${name(e.from)} to ${name(e.to)}. ${statusLabel(e.status)}.`});
+    const g=svg('g',{'data-edge':e.id,'data-status':e.status,class:'graph-edge',tabindex:0,role:'button','aria-label':`${e.label}: ${name(e.from)} to ${name(e.to)}. ${statusLabel(e.status)}.`});diagramIndex.edges.set(e.id,{edge:e,g});
     g.append(svg('title',{},`${e.label} · ${statusLabel(e.status)}`),svg('path',{d:e.d,class:'edge-mask'}),svg('path',{d:e.d,class:'edge-path'}),svg('path',{d:e.d,class:'edge-hit'}));
     g.onclick=()=>select('edge',e.id);g.onkeydown=ev=>{if(ev.key==='Enter'||ev.key===' '){ev.preventDefault();select('edge',e.id);}};root.append(g);
   });
-  for(const e of r.edges)root.append(svg('text',{x:e.labelX,y:e.labelY,class:'edge-label','text-anchor':'middle','data-label':e.id,'data-status':e.status},e.label));
+  for(const e of r.edges){const label=svg('text',{x:e.labelX,y:e.labelY,class:'edge-label','text-anchor':'middle','data-label':e.id,'data-status':e.status},e.label);diagramIndex.edges.get(e.id).label=label;root.append(label);}
   r.nodes.forEach((n,i)=>{
     const kind=n.sublabel||n.kind||'Component';
-    const g=svg('g',{'data-node':n.id,'data-status':n.status,class:'graph-node',tabindex:0,role:'button','aria-label':`${n.label}. ${kind}. ${statusLabel(n.status)}.`});
+    const g=svg('g',{'data-node':n.id,'data-status':n.status,class:'graph-node',tabindex:0,role:'button','aria-label':`${n.label}. ${kind}. ${statusLabel(n.status)}.`});diagramIndex.nodes.set(n.id,{node:n,g});
     g.append(svg('title',{},n.label+' · '+statusLabel(n.status)),svg('rect',{x:n.x-3,y:n.y-3,width:n.width+6,height:n.height+6,rx:5,class:'node-halo'}),svg('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:3,class:'node-box'}),svg('rect',{x:n.x+1,y:n.y+1,width:n.width-2,height:23,rx:2,class:'node-head'}),svg('path',{d:`M${n.x} ${n.y+24} H${n.x+n.width}`,class:'node-rule'}));
     const lines=wrappedLabel(n.label,Math.floor((n.width-24)/8.6));
     /* The evidence state always shows: as a status row when the label fits above it (shrinking to 15px lines
@@ -199,7 +207,7 @@ function renderDiagram(){
 }
 function renderMinimap(){
   const r=route(),map=$('minimap');map.replaceChildren();map.setAttribute('viewBox',r.bounds.join(' '));
-  for(const n of r.nodes)map.append(svg('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:6,class:'mm-node','data-node':n.id}));
+  for(const n of r.nodes){const rect=svg('rect',{x:n.x,y:n.y,width:n.width,height:n.height,rx:6,class:'mm-node','data-node':n.id});diagramIndex.nodes.get(n.id).mm=rect;map.append(rect);}
   map.append(svg('rect',{id:'mm-view',class:'mm-view',x:0,y:0,width:0,height:0}));
 }
 function updateMinimapView(){
@@ -217,19 +225,19 @@ function highlight(){
   const reached=selected?(trace?connected(r,selected.id,trace):new Set([selected.id,...r.edges.flatMap(e=>e.from===selected.id?[e.to]:e.to===selected.id?[e.from]:[])])):null;
   const edgeOn=e=>selected?(trace?reached.has(e.from)&&reached.has(e.to):e.from===selected.id||e.to===selected.id):edge?.id===e.id;
   const filtered=x=>state.filter!=='all'&&x.status!==state.filter;
-  for(const g of $('diagram').querySelectorAll('[data-node]')){
-    const n=r.nodes.find(n=>n.id===g.dataset.node),isSelected=selected?.id===n.id;
-    g.dataset.selected=String(isSelected);g.setAttribute('aria-pressed',String(isSelected));
-    g.dataset.near=String(!isSelected&&Boolean((reached&&reached.has(n.id))||(edge&&[edge.from,edge.to].includes(n.id))));
-    g.dataset.dim=String(filtered(n)||Boolean(reached&&!reached.has(n.id))||Boolean(edge&&![edge.from,edge.to].includes(n.id)));
+  const ends=edge?new Set([edge.from,edge.to]):null;
+  for(const {node:n,g,mm} of diagramIndex.nodes.values()){
+    const isSelected=selected?.id===n.id,near=!isSelected&&Boolean(reached?.has(n.id)||ends?.has(n.id));
+    g.dataset.selected=String(isSelected);g.setAttribute('aria-pressed',String(isSelected));g.dataset.near=String(near);
+    g.dataset.dim=String(filtered(n)||Boolean(reached&&!reached.has(n.id))||Boolean(ends&&!ends.has(n.id)));
+    if(mm){mm.dataset.selected=String(isSelected);mm.dataset.near=String(near);}
   }
-  for(const g of $('diagram').querySelectorAll('[data-edge]')){
-    const e=r.edges.find(e=>e.id===g.dataset.edge),on=edgeOn(e),dim=filtered(e)||((selected||edge)&&!on);
+  for(const {edge:e,g,label} of diagramIndex.edges.values()){
+    const on=edgeOn(e),dim=filtered(e)||((selected||edge)&&!on);
     g.dataset.selected=String(edge?.id===e.id);g.setAttribute('aria-pressed',g.dataset.selected);
     g.dataset.traced=String(Boolean(trace&&on));g.dataset.near=String(Boolean(selected&&on));g.dataset.dim=String(Boolean(dim));
-    const label=$('diagram').querySelector(`[data-label="${CSS.escape(e.id)}"]`);if(label){label.dataset.dim=String(Boolean(dim));label.dataset.on=String(Boolean(on));}
+    if(label){label.dataset.dim=String(Boolean(dim));label.dataset.on=String(Boolean(on));}
   }
-  for(const m of $('minimap').querySelectorAll('[data-node]')){m.dataset.selected=String(selected?.id===m.dataset.node);m.dataset.near=String(Boolean((reached?.has(m.dataset.node)&&selected?.id!==m.dataset.node)||(edge&&[edge.from,edge.to].includes(m.dataset.node))));}
   $('focus-selection').disabled=!(selected||edge);
 }
 
@@ -272,7 +280,7 @@ function renderBrief(box,r){
   const facts=html('dl',undefined,'facts');for(const[k,v]of [['Components',r.nodes.length],['Connections',r.edges.length],['Open questions',routeGaps.length]]){const d=html('div');d.append(html('dt',k),html('dd',String(v)));facts.append(d);}box.append(facts);
   if(routeGaps.length){
     const list=html('div');
-    for(const g of routeGaps){const row=html(g.type==='note'?'div':'button',undefined,'question-row');row.append(glyph(g.status,12),html('span',g.type==='note'?g.detail:`${g.title} · ${g.type==='edge'?'connection':'component'}`));if(g.type!=='note')row.onclick=()=>select(g.type,g.id,g.route);list.append(row);}
+    for(const g of routeGaps){const row=html(g.type==='note'?'div':'button',undefined,'question-row');row.append(statusMark(g.status),html('span',g.type==='note'?g.detail:`${g.title} · ${g.type==='edge'?'connection':'component'}`));if(g.type!=='note')row.onclick=()=>select(g.type,g.id,g.route);list.append(row);}
     box.append(section('Open questions',list));
   }
   const legend=html('ul',undefined,'legend-list');
@@ -327,7 +335,7 @@ function renderInspector(){
 
 /* List views */
 function dataRow({status,title,tag,detail,action,actionLabel='Show on diagram →',active=false}){
-  const row=html(action?'button':'article',undefined,'data-row');row.append(status?glyph(status,12):html('span'));
+  const row=html(action?'button':'article',undefined,'data-row');row.append(status?statusMark(status):html('span'));
   const copy=html('span',undefined,'row-copy'),line=html('span',undefined,'row-title-line');line.append(html('span',title,'row-title'));if(tag)line.append(html('span',tag,'row-tag'));copy.append(line);
   if(detail)copy.append(html('span',detail,'row-detail'));row.append(copy);
   if(action){row.append(html('span',actionLabel,'row-action'));row.onclick=action;}else row.append(html('span'));
@@ -415,7 +423,7 @@ function performSearch(){
     box.append(html('div',groups[type],'result-group'));
     for(const item of rows.filter(r=>r.type===type)){
       const b=html('button',undefined,'search-result'),r=data.routes.find(x=>x.id===item.route),n=item.type==='node'?r.nodes.find(n=>n.id===item.id):null;
-      b.append(glyph(item.status,12),resultCopy(item,q),html('span',n?(n.sublabel||n.kind||''):item.type==='source'?'source':'','result-meta'));
+      b.append(statusMark(item.status),resultCopy(item,q),html('span',n?(n.sublabel||n.kind||''):item.type==='source'?'source':'','result-meta'));
       b.onclick=()=>{closeDialog('search-dialog');const view=item.type==='source'?'evidence':'diagram';select(item.type,item.id,item.route,item.line,{view,frame:true,focus:true,extra:{query,scope:searchScope}});};
       box.append(b);
     }
@@ -492,7 +500,12 @@ canvas.addEventListener('pointermove',e=>{
   if(pinch&&pointers.size===2){const[a,b]=[...pointers.values()];c.zoom=Math.max(.5,Math.min(4,pinch.zoom*Math.hypot(a.x-b.x,a.y-b.y)/pinch.distance));updateCamera(false);}
   else if(pan&&pan.id===e.pointerId){c.x=pan.start.x-(e.clientX-pan.x)/pan.scale;c.y=pan.start.y-(e.clientY-pan.y)/pan.scale;updateCamera(false);}
 });
-const endPointer=e=>{pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;if(!pointers.size&&pan){pan=null;}updateCamera();};
+const endPointer=e=>{
+  pointers.delete(e.pointerId);if(pointers.size<2)pinch=null;
+  /* A pinch that loses one finger continues as a pan from the remaining finger. */
+  if(pointers.size===1&&!pan){const[[id,p]]=pointers,matrix=$('diagram').getScreenCTM();if(matrix)pan={id,x:p.x,y:p.y,start:{...getCamera()},scale:matrix.a};}
+  if(!pointers.size)pan=null;updateCamera();
+};
 canvas.addEventListener('pointerup',endPointer);canvas.addEventListener('pointercancel',endPointer);
 canvas.addEventListener('wheel',e=>{
   if(e.ctrlKey||e.metaKey){e.preventDefault();zoom(e.deltaY<0?1.08:1/1.08);return;}
@@ -502,7 +515,8 @@ canvas.addEventListener('wheel',e=>{
 let mapDrag=false;const minimap=$('minimap');
 const mapMove=e=>{const m=minimap.getScreenCTM();if(!m)return;const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse());const c=getCamera();c.x=p.x;c.y=p.y;updateCamera(false);};
 minimap.onpointerdown=e=>{mapDrag=true;minimap.setPointerCapture(e.pointerId);mapMove(e);};minimap.onpointermove=e=>{if(mapDrag)mapMove(e);};minimap.onpointerup=minimap.onpointercancel=()=>{mapDrag=false;updateCamera();};
-let resizing=false;const resizeHandle=$('resize-handle');function sizePanel(value){const width=Math.max(280,Math.min(560,value,innerWidth*.45));document.documentElement.style.setProperty('--panel-width',width+'px');resizeHandle.setAttribute('aria-valuenow',String(Math.round(width)));storage.set('panelWidth',width);}
+let resizing=false;const resizeHandle=$('resize-handle');function sizePanel(value){const width=Math.max(280,Math.min(560,value,innerWidth*.45));document.documentElement.style.setProperty('--panel-width',width+'px');storage.set('panelWidth',width);}
+if('ResizeObserver' in window)new ResizeObserver(([entry])=>{const width=Math.round(entry.contentRect.width+parseFloat(getComputedStyle($('inspector')).paddingLeft)+parseFloat(getComputedStyle($('inspector')).paddingRight));if(width>0)resizeHandle.setAttribute('aria-valuenow',String(width));}).observe($('inspector'));
 resizeHandle.onpointerdown=e=>{if(isNarrow())return;resizing=true;resizeHandle.setPointerCapture(e.pointerId);};resizeHandle.onpointermove=e=>{if(resizing)sizePanel($('workbench').getBoundingClientRect().right-e.clientX);};resizeHandle.onpointerup=resizeHandle.onpointercancel=()=>{resizing=false;};resizeHandle.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();sizePanel($('inspector').getBoundingClientRect().width+(e.key==='ArrowLeft'?20:-20));}};
 render();
 if(state.selected&&state.selectionType!=='source'&&state.view==='diagram'&&isSmall())focusSelection(false);
