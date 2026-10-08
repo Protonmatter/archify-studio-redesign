@@ -7,7 +7,7 @@ const identifier=(value,name)=>{text(value,name,200);if(!value.trim())throw new 
 export function validateModel(data) {
   if(!data||typeof data!=='object') throw new Error('Expected an atlas object');
   if(data.schemaVersion!==undefined&&data.schemaVersion!==1)throw new Error('Unsupported Studio model version');
-  text(data.title,'atlas title',300);
+  text(data.title,'atlas title',300);if(data.subtitle!==undefined)text(data.subtitle,'atlas subtitle',300);
   list(data.sources,'sources',5000);list(data.terms,'terms',30000);
   const sourceMap=new Map();let sourceBytes=0;
   for(const s of data.sources){
@@ -16,10 +16,13 @@ export function validateModel(data) {
     if(s.text!==undefined){text(s.text,'source text',5*1024*1024);sourceBytes+=s.text.length;}
     if(sourceBytes>64*1024*1024)throw new Error('Combined source text exceeds 64 MiB');
     if(s.sha256!==undefined&&s.sha256!==''&&!/^[a-f0-9]{64}$/i.test(s.sha256))throw new Error('Invalid source digest');
+    for(const key of ['repo','scope'])if(s[key]!==undefined)text(s[key],`source ${key}`,2000);
+    if(s.status!==undefined&&!STATUSES.includes(s.status))throw new Error(`Invalid source status ${s.status}`);
     sourceMap.set(s.id,{...s,lineCount:s.text===undefined?null:s.text.split(/\r?\n/).length});
   }
   const references=refs=>{for(const ref of list(refs||[],'references',1000)){
     const s=sourceMap.get(ref.source);if(!s)throw new Error(`Missing evidence source ${ref.source}`);
+    for(const key of ['path','repo','scope'])if(ref[key]!==undefined)text(ref[key],`reference ${key}`,2000);
     const end=ref.end_line??ref.line;
     if(!Number.isSafeInteger(ref.line)||ref.line<1||!Number.isSafeInteger(end)||end<ref.line||(s.lineCount!==null&&end>s.lineCount))throw new Error('Evidence reference is outside source lines');
     if(ref.sha256&&ref.sha256!==s.sha256)throw new Error('Evidence reference digest mismatch');

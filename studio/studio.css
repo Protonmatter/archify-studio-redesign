@@ -240,6 +240,7 @@ button.question-row:hover span{color:var(--accent)}
 .list-search svg{width:14px;height:14px;fill:none;stroke:currentColor;stroke-width:1.6;flex:none}
 .list-search input{flex:1;min-width:0;border:0;background:none;font-size:13px;color:var(--ink);outline:none}
 .list-search:focus-within{outline:2px solid var(--accent);outline-offset:1px}
+.list-panel .filters{padding:0 0 14px}
 .group-head{display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--rule);font:10.5px var(--mono);letter-spacing:1.3px;color:var(--muted)}
 .group-head~.group-head{padding-top:22px}
 .data-row{width:100%;display:grid;grid-template-columns:16px minmax(0,1fr) auto;gap:14px;align-items:start;padding:14px 6px;border-bottom:1px solid var(--rule);text-align:left}

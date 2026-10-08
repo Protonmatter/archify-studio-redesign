@@ -47,13 +47,20 @@ function navigate(patch,{replace=false}={}){
   const hash=encodeState(state);if(location.hash!==hash)history[replace?'replaceState':'pushState'](null,'',hash);
   render();
 }
-function select(type,id,routeId=state.route,line=undefined){
+/* Every selection goes through here: lists, search, the inspector and the diagram itself. */
+function select(type,id,routeId=state.route,line=undefined,{view=state.view,frame=isSmall(),focus=false,extra={}}={}){
   const small=isSmall();body.classList.remove('no-inspector');if(small)body.classList.add('sheet-open');
-  navigate({route:routeId,selected:id,selectionType:type,line});
-  /* On a phone the sheet covers the lower canvas, so frame the selection in the part that stays visible. */
-  if(small&&state.view==='diagram'&&type!=='source'){$('map-panel').scrollIntoView({block:'start'});focusSelection(false);}
+  navigate({route:routeId,selected:id,selectionType:type,line,view,...extra});
+  if(view!=='diagram'||type==='source')return;
+  if(small)$('map-panel').scrollIntoView({block:'start'});
+  /* Wait for layout so a view that just became visible has its real size. Focus moves to the item when
+     asked to, or when the control that had focus was replaced by the re-render. */
+  requestAnimationFrame(()=>{
+    if(frame)focusSelection(false);
+    if(focus||!document.activeElement||document.activeElement===body)$('diagram').querySelector(`[data-${type}="${CSS.escape(id)}"]`)?.focus({preventScroll:true});
+  });
 }
-function showOnDiagram(type,id,routeId){select(type,id,routeId);navigate({view:'diagram'},{replace:true});if(isSmall())$('map-panel').scrollIntoView({block:'start'});requestAnimationFrame(()=>focusSelection(false));}
+function showOnDiagram(type,id,routeId){select(type,id,routeId,undefined,{view:'diagram',frame:true,focus:true});}
 function restoreFocus(key){
   if(!key||(document.activeElement?.dataset?.focusKey===key&&document.activeElement.isConnected))return;
   const target=document.querySelector(`[data-focus-key="${CSS.escape(key)}"]`);
@@ -107,13 +114,13 @@ function renderHeading(){
   const gapTotal=gaps(data,state.scope,state.route).length;$('gap-count').textContent=gapTotal;$('gap-count').dataset.zero=String(!gapTotal);
   for(const b of document.querySelectorAll('[data-scope]'))b.setAttribute('aria-pressed',String(b.dataset.scope===state.scope));
 }
-function renderFilters(){
-  const r=route(),box=$('filters');box.replaceChildren(html('span','EVIDENCE','mono-label'));
-  const counts=Object.fromEntries(STATUSES.map(s=>[s,0]));for(const x of [...r.nodes,...r.edges])counts[x.status]++;
+function renderFilters(box,items){
+  box.replaceChildren(html('span','EVIDENCE','mono-label'));
+  const counts=Object.fromEntries(STATUSES.map(s=>[s,0]));for(const x of items)counts[x.status]++;
   const chip=(status,label,count)=>{const b=html('button',undefined,'chip');b.dataset.focusKey='chip:'+status;if(status!=='all'){b.dataset.status=status;b.append(glyph(status));}b.append(label,html('span',String(count),'n'));
     const active=state.filter===status;b.setAttribute('aria-pressed',String(active));b.disabled=!count&&!active;
     b.onclick=()=>navigate({filter:active&&status!=='all'?'all':status});return b;};
-  box.append(chip('all','All',r.nodes.length+r.edges.length));
+  box.append(chip('all','All',items.length));
   const short={static:'Static','software-tested':'Tested'};
   for(const s of [...STATUSES.filter(s=>counts[s]),...STATUSES.filter(s=>!counts[s])]){const b=chip(s,short[s]||statusLabel(s),counts[s]);b.title=statusLabel(s);box.append(b);}
 }
@@ -316,8 +323,11 @@ function renderList(){
   const head=html('div',undefined,'list-head'),copy=html('div'),intro=html('p','','list-intro');copy.append(html('h2',titles[state.view]),intro);
   const field=html('label',undefined,'list-search');const glass=svg('svg',{viewBox:'0 0 20 20','aria-hidden':'true'});glass.append(svg('circle',{cx:8.5,cy:8.5,r:5.5}),svg('path',{d:'m13 13 4.5 4.5'}));
   const input=html('input');input.type='search';input.value=state.query;input.placeholder='Filter this view';input.setAttribute('aria-label','Filter '+titles[state.view].toLowerCase());field.append(glass,input);
-  head.append(copy,field);const results=html('div');box.append(head,results);
-  const routes=data.routes.filter(x=>all||x.id===r.id),filterNote=state.filter!=='all'&&state.view!=='evidence'?` · only ${statusLabel(state.filter).toLowerCase()}`:'';
+  head.append(copy,field);const results=html('div');box.append(head);
+  const routes=data.routes.filter(x=>all||x.id===r.id);
+  if(state.view!=='evidence'){const filters=html('div',undefined,'filters list-filters');filters.setAttribute('role','group');filters.setAttribute('aria-label','Filter by evidence state');renderFilters(filters,state.view==='gaps'?routes.flatMap(rr=>gaps(data,'route',rr.id)):routes.flatMap(rr=>rr.edges));box.append(filters);}
+  box.append(results);
+  const filterNote=state.filter!=='all'&&state.view!=='evidence'?` · only ${statusLabel(state.filter).toLowerCase()}`:'';
   const draw=()=>{
     results.replaceChildren();const q=state.query.toLowerCase();let count=0;
     const groupHead=(rr,n)=>{if(!n)return;const h=html('div',undefined,'group-head');h.append(html('span',`${num(data.routes.indexOf(rr))} · ${rr.title.toUpperCase()}`),html('span',String(n)));return h;};
@@ -345,12 +355,12 @@ function renderList(){
 function render(){
   const r=route(),focusKey=document.activeElement?.dataset?.focusKey;
   if(currentRoute!==r.id){renderDiagram();currentRoute=r.id;}
-  renderDirectory();renderHeading();renderFilters();
+  renderDirectory();renderHeading();
+  if(state.view==='diagram')renderFilters($('filters'),[...r.nodes,...r.edges]);else $('filters').replaceChildren();
   for(const button of document.querySelectorAll('[data-view]')){const active=button.dataset.view===state.view;button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;}
   $('map-panel').hidden=state.view!=='diagram';$('list-panel').hidden=state.view==='diagram';$('list-panel').setAttribute('aria-labelledby','tab-'+state.view);
   highlight();renderInspector();if(state.view!=='diagram')renderList();
   const open=isSmall()?body.classList.contains('sheet-open'):!body.classList.contains('no-inspector');$('inspector-toggle').setAttribute('aria-expanded',String(open));
-  if(state.view==='diagram')requestAnimationFrame(updateMinimapView);
   restoreFocus(focusKey);
 }
 
@@ -390,7 +400,7 @@ function performSearch(){
     for(const item of rows.filter(r=>r.type===type)){
       const b=html('button',undefined,'search-result'),r=data.routes.find(x=>x.id===item.route),n=item.type==='node'?r.nodes.find(n=>n.id===item.id):null;
       b.append(glyph(item.status,12),resultCopy(item,q),html('span',n?(n.sublabel||n.kind||''):item.type==='source'?'source':'','result-meta'));
-      b.onclick=()=>{closeDialog('search-dialog');select(item.type,item.id,item.route,item.line);navigate({view:item.type==='source'?'evidence':'diagram',query,scope:searchScope},{replace:true});if(item.type!=='source'&&!isSmall())focusSelection(false);};
+      b.onclick=()=>{closeDialog('search-dialog');const view=item.type==='source'?'evidence':'diagram';select(item.type,item.id,item.route,item.line,{view,frame:true,focus:true,extra:{query,scope:searchScope}});};
       box.append(b);
     }
   }
@@ -440,7 +450,8 @@ $('export-open').onclick=()=>$('export-dialog').showModal();$('export-svg').oncl
 $('copy-link').onclick=async()=>{try{await navigator.clipboard.writeText(location.href);announce('View link copied. The recipient needs access to this atlas.');closeDialog('export-dialog');}catch{announce('Clipboard unavailable. Copy the current address from your browser.');}};
 function syncFromHistory(){state=decodeState(location.hash,data);trace='';if(isSmall())body.classList.toggle('sheet-open',Boolean(state.selected));render();}
 window.addEventListener('popstate',syncFromHistory);window.addEventListener('hashchange',syncFromHistory);
-window.addEventListener('resize',()=>{updateMinimapView();if(!isNarrow()){body.classList.remove('nav-open');$('scrim').hidden=true;}$('nav-toggle').setAttribute('aria-expanded',String(navIsOpen()));});
+if('ResizeObserver' in window)new ResizeObserver(()=>requestAnimationFrame(updateMinimapView)).observe($('canvas'));else window.addEventListener('resize',updateMinimapView);
+window.addEventListener('resize',()=>{if(!isNarrow()){body.classList.remove('nav-open');$('scrim').hidden=true;}$('nav-toggle').setAttribute('aria-expanded',String(navIsOpen()));});
 document.addEventListener('keydown',e=>{
   if(document.querySelector('dialog[open]')||e.ctrlKey||e.metaKey||e.altKey)return;if(['INPUT','TEXTAREA','SELECT'].includes(document.activeElement.tagName))return;
   if(e.key==='/'){e.preventDefault();openSearch();}
@@ -474,7 +485,7 @@ canvas.addEventListener('wheel',e=>{
 let mapDrag=false;const minimap=$('minimap');
 const mapMove=e=>{const m=minimap.getScreenCTM();if(!m)return;const p=new DOMPoint(e.clientX,e.clientY).matrixTransform(m.inverse());const c=getCamera();c.x=p.x;c.y=p.y;updateCamera(false);};
 minimap.onpointerdown=e=>{mapDrag=true;minimap.setPointerCapture(e.pointerId);mapMove(e);};minimap.onpointermove=e=>{if(mapDrag)mapMove(e);};minimap.onpointerup=minimap.onpointercancel=()=>{mapDrag=false;updateCamera();};
-let resizing=false;const resizeHandle=$('resize-handle');function sizePanel(value){const width=Math.max(280,Math.min(560,value,innerWidth*.45));document.documentElement.style.setProperty('--panel-width',width+'px');resizeHandle.setAttribute('aria-valuenow',String(Math.round(width)));storage.set('panelWidth',width);updateMinimapView();}
+let resizing=false;const resizeHandle=$('resize-handle');function sizePanel(value){const width=Math.max(280,Math.min(560,value,innerWidth*.45));document.documentElement.style.setProperty('--panel-width',width+'px');resizeHandle.setAttribute('aria-valuenow',String(Math.round(width)));storage.set('panelWidth',width);}
 resizeHandle.onpointerdown=e=>{if(isNarrow())return;resizing=true;resizeHandle.setPointerCapture(e.pointerId);};resizeHandle.onpointermove=e=>{if(resizing)sizePanel($('workbench').getBoundingClientRect().right-e.clientX);};resizeHandle.onpointerup=resizeHandle.onpointercancel=()=>{resizing=false;};resizeHandle.onkeydown=e=>{if(e.key==='ArrowLeft'||e.key==='ArrowRight'){e.preventDefault();sizePanel($('inspector').getBoundingClientRect().width+(e.key==='ArrowLeft'?20:-20));}};
 render();
 if(state.selected&&state.selectionType!=='source'&&state.view==='diagram'&&isSmall())focusSelection(false);
