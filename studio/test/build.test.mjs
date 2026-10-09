@@ -10,6 +10,16 @@ test('inline data cannot terminate script tags',()=>{const value={x:'</script><i
 test('source traversal and absolute paths are refused',()=>{const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-path-'));try{fs.writeFileSync(path.join(root,'a.txt'),'safe');assert.equal(safeInput(root,'a.txt'),path.join(root,'a.txt'));for(const p of ['../escape','/etc/passwd','https://example.com','C:\\secret'])assert.throws(()=>safeInput(root,p));}finally{fs.rmSync(root,{recursive:true,force:true});}});
 test('routing is deterministic and every edge has finite geometry',()=>{const a=prepareGeometry(exampleAtlas()),b=prepareGeometry(exampleAtlas());assert.deepEqual(a,b);for(const r of a.routes)for(const e of r.edges){assert(e.d.startsWith('M'));assert(e.points.length>=2);assert(e.points.flat().every(Number.isFinite));assert(r.bounds.every(Number.isFinite));}});
 test('portable document root contains the license for browser re-export',()=>{const result=buildHTML(exampleAtlas());const root=result.slice(result.indexOf('<html'));assert(root.includes('Permission is hereby granted'));assert(root.includes('Copyright (c) 2026 tt-a1i'));});
+test('diagram bounds include connection labels and transport chips on exterior channels',()=>{
+  /* The exterior vertical run is the longest segment, so the label sits on it, outside every node and route point. */
+  const data=exampleAtlas(),r=data.routes[1];
+  r.nodes=[{id:'a',label:'Upper',kind:'Endpoint',status:'documented',x:0,y:0,width:222,height:90,symbols:[],sources:[]},{id:'b',label:'Lower',kind:'Endpoint',status:'documented',x:0,y:1000,width:222,height:90,symbols:[],sources:[]}];
+  r.edges=[{id:'outside',from:'a',to:'b',label:'A deliberately long relationship label',status:'documented',fromSide:'left',toSide:'left',via:[[-60,45],[-60,1045]],transport:{mechanism:'Shared memory ring',port:0},sources:[]}];
+  const route=prepareGeometry(data).routes[1],e=route.edges[0],half=e.label.length*3.6;
+  assert(Math.abs(e.labelX+60)<1,`label expected on the exterior run, got x=${e.labelX}`);
+  assert(route.bounds[0]<=e.labelX-half,`left bound ${route.bounds[0]} clips the label, which starts at ${e.labelX-half}`);
+  assert(route.bounds[1]+route.bounds[3]>=e.labelY+28,'bottom bound clips the transport chip');
+});
 test('malformed and extreme edge waypoints fail before routing',()=>{for(const via of [[['garbage',100]],[[1e200,100]],[[1,2,3]]]){const data=exampleAtlas();data.routes[0].edges[0].via=via;assert.throws(()=>prepareGeometry(data));}});
 function cleanup(root){assert.equal(path.dirname(path.resolve(root)),path.resolve(os.tmpdir()));assert(path.basename(root).startsWith('studio-'));fs.rmSync(root,{recursive:true,force:true});}
 test('atlas import binds indexed references, verifies hashes and preserves explicit routing',()=>{
@@ -26,6 +36,33 @@ test('atlas import binds indexed references, verifies hashes and preserves expli
     const imported=importAtlas(root);assert.equal(imported.terms[0].references[0].source,source.id);assert.equal(imported.terms[0].references[0].line,3);assert.equal(imported.routes[0].edges[0].route,'auto');assert(buildHTML(imported).includes('TEST_TERM'));
     candidate.connections[0].to='unknown';fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));assert.throws(()=>importAtlas(root),/topology/);
     fs.writeFileSync(path.join(root,raw),'changed');assert.throws(()=>importAtlas(root),/hash mismatch/);
+  }finally{cleanup(root);}
+});
+test('candidate connections contribute geometry only, never evidence claims',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-claims-'));
+  try{
+    const model=exampleAtlas(),r=model.routes[0],contents=model.sources[0].text;fs.writeFileSync(path.join(root,'source.txt'),contents);
+    const source={...model.sources[0],raw:'source.txt',href:'source.html',sha256:createHash('sha256').update(contents).digest('hex')};
+    const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height],sublabel:'Injected by candidate'})),
+      connections:r.edges.map(e=>({id:'candidate-'+e.id,from:e.from,to:e.to,label:e.label,route:'orthogonal-h',transport:{mechanism:'Injected',port:1},detail:'Candidate-only claim',status:'observed'}))};
+    fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
+    const edges=r.edges.map(({transport,detail,...e})=>e);
+    fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify({routes:[{...r,edges,candidate:'candidate.json'}],sources:[source],terms:[]}));
+    const importedRoute=importAtlas(root).routes[0],imported=importedRoute.edges[0];
+    assert.equal(importedRoute.nodes[0].sublabel,r.nodes[0].sublabel);
+    assert.equal(imported.route,'orthogonal-h');assert.equal(imported.id,r.edges[0].id);assert.equal(imported.transport,undefined);assert.equal(imported.detail,undefined);assert.equal(imported.status,r.edges[0].status);
+  }finally{cleanup(root);}
+});
+test('a missing evidence relationship ID falls back to the candidate ID for older packets',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-ids-'));
+  try{
+    const model=exampleAtlas(),r=model.routes[0],contents=model.sources[0].text;fs.writeFileSync(path.join(root,'source.txt'),contents);
+    const source={...model.sources[0],raw:'source.txt',href:'source.html',sha256:createHash('sha256').update(contents).digest('hex')};
+    const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height]})),connections:r.edges.map(e=>({id:'candidate-'+e.id,from:e.from,to:e.to,label:e.label}))};
+    fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
+    const edges=r.edges.map(({id,...e})=>e);
+    fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify({routes:[{...r,edges,candidate:'candidate.json'}],sources:[source],terms:[]}));
+    assert.equal(importAtlas(root).routes[0].edges[0].id,'candidate-'+r.edges[0].id);
   }finally{cleanup(root);}
 });
 test('an external directory link cannot expose files outside an atlas',()=>{

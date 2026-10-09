@@ -3,7 +3,7 @@ import path from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {createHash} from 'node:crypto';
 import {createRouter} from '../archify/renderers/architecture/routing.mjs';
-import {validateModel} from './model.mjs';
+import {validateModel,edgeTextHalfWidth,edgeTextBelow} from './model.mjs';
 import {exampleAtlas} from './example.mjs';
 import {parseJSONStrict} from './json-input.mjs';
 
@@ -27,11 +27,19 @@ export function prepareGeometry(data){
       let best=0;for(let i=1;i<e.points.length;i++){const a=e.points[i-1],b=e.points[i];const len=Math.hypot(b[0]-a[0],b[1]-a[1]);if(len>best){best=len;e.labelX=(a[0]+b[0])/2;e.labelY=(a[1]+b[1])/2-10;}}
     }
     const points=r.edges.flatMap(e=>e.points);
-    const minX=Math.min(...r.nodes.map(n=>n.x),...points.map(p=>p[0]))-45;
-    const minY=Math.min(...r.nodes.map(n=>n.y),...points.map(p=>p[1]))-65;
-    r.bounds=[minX,minY,Math.max(...r.nodes.map(n=>n.x+n.width),...points.map(p=>p[0]))-minX+45,Math.max(...r.nodes.map(n=>n.y+n.height),...points.map(p=>p[1]))-minY+65];
+    /* Labels and transport chips are drawn around labelX/labelY and can reach past the geometry margin. */
+    const text=r.edges.filter(e=>Number.isFinite(e.labelX)).map(e=>{const half=edgeTextHalfWidth(e);return [e.labelX-half-8,e.labelY-22,e.labelX+half+8,e.labelY+edgeTextBelow(e)+8];});
+    const minX=Math.min(Math.min(...r.nodes.map(n=>n.x),...points.map(p=>p[0]))-45,...text.map(t=>t[0]));
+    const minY=Math.min(Math.min(...r.nodes.map(n=>n.y),...points.map(p=>p[1]))-65,...text.map(t=>t[1]));
+    const maxX=Math.max(Math.max(...r.nodes.map(n=>n.x+n.width),...points.map(p=>p[0]))+45,...text.map(t=>t[2]));
+    const maxY=Math.max(Math.max(...r.nodes.map(n=>n.y+n.height),...points.map(p=>p[1]))+65,...text.map(t=>t[3]));
+    r.bounds=[minX,minY,maxX-minX,maxY-minY];
   }return data;
 }
+/* Candidates supply geometry only: component position and size, and connection routing. Every claim (label, kind,
+   sublabel, status, detail, transport, sources) comes from the evidence record, so a candidate can never add one. */
+const CANDIDATE_GEOMETRY=['via','route','fromSide','toSide','channelX','channelY','labelAt'];
+const candidateGeometry=c=>Object.fromEntries(CANDIDATE_GEOMETRY.filter(k=>c&&c[k]!==undefined).map(k=>[k,c[k]]));
 export function importAtlas(directory){
   const input=parseJSONStrict(fs.readFileSync(safeInput(directory,'atlas-data.json')));
   if(!Array.isArray(input.routes)||input.routes.length>100||!Array.isArray(input.sources)||input.sources.length>5000)throw new Error('Unsupported atlas');
@@ -42,7 +50,7 @@ export function importAtlas(directory){
     if(candidate.diagram_type!=='architecture')throw new Error('Studio currently supports architecture atlas diagrams');
     if(JSON.stringify(candidate.components.map(n=>n.id))!==JSON.stringify(r.nodes.map(n=>n.id))||JSON.stringify(candidate.connections.map(e=>[e.from,e.to,e.label]))!==JSON.stringify(r.edges.map(e=>[e.from,e.to,e.label])))throw new Error(`Diagram candidate does not match evidence topology: ${r.id}`);
     const componentMap=new Map(candidate.components.map(n=>[n.id,n]));
-    return {...r,shortTitle:r.shortTitle||r.title.split(':')[0],group:r.group||(r.id==='overview'?'START HERE':r.id.startsWith('windows')?'WINDOWS INTERFACES':['sdk','ownership-lifecycle'].includes(r.id)?'APPLICATION INTEGRATION':'FIRMWARE & TRANSPORT'),nodes:r.nodes.map(n=>{const c=componentMap.get(n.id);if(!c)throw new Error(`Missing component ${n.id}`);return {...n,x:c.pos[0],y:c.pos[1],width:c.size[0],height:Math.max(c.size[1],84),sublabel:c.sublabel};}),edges:r.edges.map((e,i)=>({...candidate.connections[i],...e,id:candidate.connections[i]?.id||`${r.id}-edge-${i}`}))};
+    return {...r,shortTitle:r.shortTitle||r.title.split(':')[0],group:r.group||(r.id==='overview'?'START HERE':r.id.startsWith('windows')?'WINDOWS INTERFACES':['sdk','ownership-lifecycle'].includes(r.id)?'APPLICATION INTEGRATION':'FIRMWARE & TRANSPORT'),nodes:r.nodes.map(n=>{const c=componentMap.get(n.id);if(!c)throw new Error(`Missing component ${n.id}`);return {...n,x:c.pos[0],y:c.pos[1],width:c.size[0],height:Math.max(c.size[1],84)};}),edges:r.edges.map((e,i)=>({...candidateGeometry(candidate.connections[i]),...e,id:e.id??candidate.connections[i]?.id??`${r.id}-edge-${i}`}))};
   });
   const groupOrder=['START HERE','WINDOWS INTERFACES','FIRMWARE & TRANSPORT','APPLICATION INTEGRATION'];
   routes.sort((a,b)=>groupOrder.indexOf(a.group)-groupOrder.indexOf(b.group));

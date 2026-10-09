@@ -1,13 +1,30 @@
 /** Pure data/navigation contracts shared by the build, browser and tests. */
 export const STATUSES = ['observed','static','documented','software-tested','unresolved','failed'];
 export const VIEWS = ['diagram','relationships','evidence','gaps'];
+export const TRANSPORT_FIELDS = ['mechanism','protocol','port','call','attributes'];
+/** One-line description of how a relationship crosses its boundary, e.g. "HTTPS :443 · POST /v1/requests". */
+export function transportSummary(t){if(!t)return '';const head=[t.mechanism,t.protocol&&t.protocol!==t.mechanism?t.protocol:''].filter(Boolean).join(' · ')+(t.port!==undefined?` :${t.port}`:'');return [head.trim(),t.call].filter(Boolean).join(' · ');}
+/** The on-line chip: mechanism and port only, so it fits between components. Never replaces the label. */
+export function transportChip(t){
+  if(!t)return '';const head=t.mechanism||t.protocol||t.call||'';const text=[head,t.port!==undefined?':'+t.port:''].filter(Boolean).join(' ');
+  /* Shorten on whole user-perceived characters so a surrogate pair or combining sequence is never split. */
+  const chars=typeof Intl!=='undefined'&&Intl.Segmenter?Array.from(new Intl.Segmenter(undefined,{granularity:'grapheme'}).segment(text),s=>s.segment):Array.from(text);
+  return chars.length>18?chars.slice(0,17).join('')+'…':text;
+}
+/** Approximate extent of a connection's label and chip around labelX/labelY (11.5px monospace is about 7px a character). */
+/** Width in narrow-character units: East Asian wide and full-width characters and emoji count as two. */
+export function displayUnits(text){let units=0;for(const ch of text){const c=ch.codePointAt(0);units+=(c>=0x1100&&c<=0x115f)||(c>=0x2e80&&c<=0xa4cf)||(c>=0xac00&&c<=0xd7a3)||(c>=0xf900&&c<=0xfaff)||(c>=0xfe30&&c<=0xfe4f)||(c>=0xff00&&c<=0xff60)||(c>=0xffe0&&c<=0xffe6)||(c>=0x1f300&&c<=0x1faff)||(c>=0x20000&&c<=0x3fffd)?2:c>=0x300&&c<=0x36f?0:1;}return units;}
+export function edgeTextHalfWidth(e){return Math.max(displayUnits(e.label),displayUnits(transportChip(e.transport)))*3.6;}
+export function edgeTextBelow(e){return e.transport?28:6;}
+/** Every searchable transport value, attributes included. */
+export function transportText(t){return t?[transportSummary(t),...(t.attributes||[]).flatMap(a=>[a.name,a.value])].join(' '):'';}
 const text = (v, name, max=20000) => { if(typeof v!=='string'||v.length>max) throw new Error(`Invalid ${name}`); return v; };
 const list=(v,name,max)=>{if(!Array.isArray(v)||v.length>max)throw new Error(`Invalid ${name}`);return v;};
 const identifier=(value,name)=>{text(value,name,200);if(!value.trim())throw new Error(`Empty ${name}`);};
 export function validateModel(data) {
   if(!data||typeof data!=='object') throw new Error('Expected an atlas object');
   if(data.schemaVersion!==undefined&&data.schemaVersion!==1)throw new Error('Unsupported Studio model version');
-  text(data.title,'atlas title',300);
+  text(data.title,'atlas title',300);if(data.subtitle!==undefined)text(data.subtitle,'atlas subtitle',300);
   list(data.sources,'sources',5000);list(data.terms,'terms',30000);
   const sourceMap=new Map();let sourceBytes=0;
   for(const s of data.sources){
@@ -16,10 +33,13 @@ export function validateModel(data) {
     if(s.text!==undefined){text(s.text,'source text',5*1024*1024);sourceBytes+=s.text.length;}
     if(sourceBytes>64*1024*1024)throw new Error('Combined source text exceeds 64 MiB');
     if(s.sha256!==undefined&&s.sha256!==''&&!/^[a-f0-9]{64}$/i.test(s.sha256))throw new Error('Invalid source digest');
+    for(const key of ['repo','scope'])if(s[key]!==undefined)text(s[key],`source ${key}`,2000);
+    if(s.status!==undefined&&!STATUSES.includes(s.status))throw new Error(`Invalid source status ${s.status}`);
     sourceMap.set(s.id,{...s,lineCount:s.text===undefined?null:s.text.split(/\r?\n/).length});
   }
   const references=refs=>{for(const ref of list(refs||[],'references',1000)){
     const s=sourceMap.get(ref.source);if(!s)throw new Error(`Missing evidence source ${ref.source}`);
+    for(const key of ['path','repo','scope'])if(ref[key]!==undefined)text(ref[key],`reference ${key}`,2000);
     const end=ref.end_line??ref.line;
     if(!Number.isSafeInteger(ref.line)||ref.line<1||!Number.isSafeInteger(end)||end<ref.line||(s.lineCount!==null&&end>s.lineCount))throw new Error('Evidence reference is outside source lines');
     if(ref.sha256&&ref.sha256!==s.sha256)throw new Error('Evidence reference digest mismatch');
@@ -32,6 +52,7 @@ export function validateModel(data) {
   for(const route of data.routes){
     identifier(route.id,'route ID'); text(route.title,'route title',500);
     if(route.summary!==undefined)text(route.summary,'route summary');
+    for(const key of ['group','shortTitle','intent','provenance'])if(route[key]!==undefined)text(route[key],`route ${key}`);
     for(const unknown of list(route.unknowns||[],'unknowns',1000))text(unknown,'unknown');
     if(routes.has(route.id)) throw new Error(`Duplicate route ${route.id}`); routes.add(route.id);
     if(!Array.isArray(route.nodes)||!route.nodes.length||route.nodes.length>500||!Array.isArray(route.edges)||route.edges.length>2000) throw new Error('Diagram exceeds node/edge limits');
@@ -53,6 +74,14 @@ export function validateModel(data) {
       if(e.detail!==undefined)text(e.detail,'relationship detail');references(e.sources);
       if(e.via!==undefined)for(const point of list(e.via,'waypoints',200)){if(!Array.isArray(point)||point.length!==2||!point.every(n=>Number.isFinite(n)&&Math.abs(n)<=100000))throw new Error('Invalid edge waypoint');}
       for(const key of ['channelX','channelY'])if(e[key]!==undefined&&(!Number.isFinite(e[key])||Math.abs(e[key])>100000))throw new Error('Invalid edge channel');
+      if(e.transport!==undefined){
+        const t=e.transport;if(!t||typeof t!=='object'||Array.isArray(t))throw new Error('Invalid relationship transport');
+        for(const key of Object.keys(t))if(!TRANSPORT_FIELDS.includes(key))throw new Error(`Unknown transport field ${key}`);
+        for(const key of ['mechanism','protocol','call'])if(t[key]!==undefined){text(t[key],`transport ${key}`,500);if(!t[key].trim())throw new Error(`Empty transport ${key}`);}
+        if(t.port!==undefined&&!(Number.isSafeInteger(t.port)&&t.port>=0&&t.port<=65535))throw new Error('Transport port must be an integer from 0 to 65535');
+        for(const a of list(t.attributes===undefined?[]:t.attributes,'transport attributes',20)){if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('Invalid transport attribute');for(const key of Object.keys(a))if(key!=='name'&&key!=='value')throw new Error(`Unknown transport attribute field ${key}`);text(a.name,'transport attribute name',500);text(a.value,'transport attribute value',2000);if(!a.name.trim()||!a.value.trim())throw new Error('Empty transport attribute');}
+        if(!['mechanism','protocol','port','call'].some(k=>t[k]!==undefined)&&!(t.attributes||[]).length)throw new Error('Empty relationship transport');
+      }
     }
   }
   return data;
@@ -87,7 +116,7 @@ export function search(data,query,scope,routeId,filter='all'){
   const rows=[];const add=(entry,extra='')=>{const name=entry.title.toLowerCase(),symbols=(entry.symbols||[]).map(s=>s.toLowerCase());const hay=[name,...symbols,extra].join(' ').toLowerCase();if(hay.includes(q)&&(filter==='all'||entry.status===filter)){entry.score=name===q||symbols.includes(q)?0:name.startsWith(q)?1:2;rows.push(entry);}};
   for(const r of data.routes.filter(r=>scope==='all'||r.id===routeId)){
     for(const n of r.nodes)add({type:'node',id:n.id,title:n.label,route:r.id,routeTitle:r.title,status:n.status,symbols:n.symbols||[]},n.detail||'');
-    for(const e of r.edges)add({type:'edge',id:e.id,title:e.label,route:r.id,routeTitle:r.title,status:e.status},e.detail||'');
+    for(const e of r.edges)add({type:'edge',id:e.id,title:e.label,route:r.id,routeTitle:r.title,status:e.status},[e.detail||'',transportText(e.transport)].join(' '));
   }
   const sourceIds=new Set(data.routes.find(r=>r.id===routeId)?.nodes.concat(data.routes.find(r=>r.id===routeId)?.edges||[]).flatMap(n=>(n.sources||[]).map(s=>s.source))||[]);
   for(const s of data.sources.filter(s=>scope==='all'||sourceIds.has(s.id)))add({type:'source',id:s.id,title:s.path,route:routeId,routeTitle:s.repo||'Source',status:s.status||'documented'},s.scope||'');
