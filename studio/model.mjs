@@ -12,7 +12,9 @@ export function transportChip(t){
   return chars.length>18?chars.slice(0,17).join('')+'…':text;
 }
 /** Approximate extent of a connection's label and chip around labelX/labelY (11.5px monospace is about 7px a character). */
-export function edgeTextHalfWidth(e){return Math.max(e.label.length,transportChip(e.transport).length)*3.6;}
+/** Width in narrow-character units: East Asian wide and full-width characters and emoji count as two. */
+export function displayUnits(text){let units=0;for(const ch of text){const c=ch.codePointAt(0);units+=(c>=0x1100&&c<=0x115f)||(c>=0x2e80&&c<=0xa4cf)||(c>=0xac00&&c<=0xd7a3)||(c>=0xf900&&c<=0xfaff)||(c>=0xfe30&&c<=0xfe4f)||(c>=0xff00&&c<=0xff60)||(c>=0xffe0&&c<=0xffe6)||(c>=0x1f300&&c<=0x1faff)||(c>=0x20000&&c<=0x3fffd)?2:c>=0x300&&c<=0x36f?0:1;}return units;}
+export function edgeTextHalfWidth(e){return Math.max(displayUnits(e.label),displayUnits(transportChip(e.transport)))*3.6;}
 export function edgeTextBelow(e){return e.transport?28:6;}
 /** Every searchable transport value, attributes included. */
 export function transportText(t){return t?[transportSummary(t),...(t.attributes||[]).flatMap(a=>[a.name,a.value])].join(' '):'';}
@@ -77,7 +79,7 @@ export function validateModel(data) {
         for(const key of Object.keys(t))if(!TRANSPORT_FIELDS.includes(key))throw new Error(`Unknown transport field ${key}`);
         for(const key of ['mechanism','protocol','call'])if(t[key]!==undefined){text(t[key],`transport ${key}`,500);if(!t[key].trim())throw new Error(`Empty transport ${key}`);}
         if(t.port!==undefined&&!(Number.isSafeInteger(t.port)&&t.port>=0&&t.port<=65535))throw new Error('Transport port must be an integer from 0 to 65535');
-        for(const a of list(t.attributes||[],'transport attributes',20)){if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('Invalid transport attribute');for(const key of Object.keys(a))if(key!=='name'&&key!=='value')throw new Error(`Unknown transport attribute field ${key}`);text(a.name,'transport attribute name',500);text(a.value,'transport attribute value',2000);if(!a.name.trim()||!a.value.trim())throw new Error('Empty transport attribute');}
+        for(const a of list(t.attributes===undefined?[]:t.attributes,'transport attributes',20)){if(!a||typeof a!=='object'||Array.isArray(a))throw new Error('Invalid transport attribute');for(const key of Object.keys(a))if(key!=='name'&&key!=='value')throw new Error(`Unknown transport attribute field ${key}`);text(a.name,'transport attribute name',500);text(a.value,'transport attribute value',2000);if(!a.name.trim()||!a.value.trim())throw new Error('Empty transport attribute');}
         if(!['mechanism','protocol','port','call'].some(k=>t[k]!==undefined)&&!(t.attributes||[]).length)throw new Error('Empty relationship transport');
       }
     }

@@ -374,6 +374,8 @@ mark{background:var(--mark);color:var(--accent-strong);border-radius:2px;padding
   .nav-open .directory{visibility:visible;transform:none}
   .crumbs,.mast-separator{display:none}
   .search-trigger{width:40px;height:40px;padding:0;justify-content:center;border-color:transparent;background:none}
+  .focus-tool span,.flow-tool span{display:none}
+  .minimap{bottom:64px}
   .search-trigger .search-placeholder,.search-trigger kbd{display:none}
   .search-trigger svg{width:18px;height:18px}
   .stats{display:none}

@@ -16,7 +16,7 @@ const viewQueries=new Map();
 const storage={get(key,fallback,valid=()=>true){try{const value=JSON.parse(localStorage.getItem('archify-studio:'+key));return value!==null&&valid(value)?value:fallback;}catch{return fallback;}},set(key,value){try{localStorage.setItem('archify-studio:'+key,JSON.stringify(value));}catch{/* Viewer remains usable when storage is unavailable. */}}};
 const collapsedGroups=new Set(storage.get('collapsedGroups',[],v=>Array.isArray(v)&&v.every(g=>typeof g==='string')));
 const isTheme=v=>v==='paper'||v==='ink';
-let directoryRoute='';
+let directoryRoute=state.route;
 const route=()=>data.routes.find(r=>r.id===state.route);
 const num=i=>String(i+1).padStart(2,'0');
 const isSmall=()=>matchMedia('(max-width:700px)').matches;
@@ -373,7 +373,7 @@ function renderList(){
     if(state.view==='relationships')for(const rr of routes){
       const rows=rr.edges.filter(e=>state.filter==='all'||e.status===state.filter).map(e=>({e,a:rr.nodes.find(n=>n.id===e.from),b:rr.nodes.find(n=>n.id===e.to)})).filter(({e,a,b})=>[a.label,b.label,e.label,e.detail||'',transportText(e.transport)].join(' ').toLowerCase().includes(q));
       if(rows.length){results.append(groupHead(rr,rows.length));count+=rows.length;}
-      for(const{e,a,b}of rows)results.append(dataRow({status:e.status,title:`${a.label} → ${b.label}`,tag:e.label,meta:transportSummary(e.transport),detail:e.detail,action:()=>showOnDiagram('edge',e.id,rr.id),active:state.selected===e.id&&state.route===rr.id}));
+      for(const{e,a,b}of rows)results.append(dataRow({status:e.status,title:`${a.label} → ${b.label}`,tag:e.label,meta:[transportSummary(e.transport),...(e.transport?.attributes||[]).map(a=>`${a.name}: ${a.value}`)].filter(Boolean).join(' · '),detail:e.detail,action:()=>showOnDiagram('edge',e.id,rr.id),active:state.selected===e.id&&state.route===rr.id}));
     }
     if(state.view==='evidence')for(const s of scopedSources(data,state.scope,state.route).filter(s=>(s.path+' '+(s.repo||'')+' '+(s.scope||'')).toLowerCase().includes(q))){count++;results.append(dataRow({title:s.path,tag:s.scope,detail:`${s.repo||'Source'}${s.text?' · '+s.text.split('\n').length+' lines':' · text not included'}`,action:()=>select('source',s.id),actionLabel:'Read source →',active:state.selected===s.id}));}
     if(state.view==='gaps')for(const rr of routes){
