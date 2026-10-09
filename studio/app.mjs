@@ -444,7 +444,7 @@ function performSearch(){
     box.append(html('div',groups[type],'result-group'));
     for(const item of rows.filter(r=>r.type===type)){
       const b=html('button',undefined,'search-result'),r=data.routes.find(x=>x.id===item.route),n=item.type==='node'?r.nodes.find(n=>n.id===item.id):null;
-      b.append(statusMark(item.status),resultCopy(item,q),html('span',n?(n.sublabel||n.kind||''):item.type==='source'?'source':'','result-meta'));
+      const meta=html('span',n?(n.sublabel||n.kind||''):item.type==='source'?'source':'','result-meta');meta.title=meta.textContent;b.append(statusMark(item.status),resultCopy(item,q),meta);
       b.onclick=()=>{closeDialog('search-dialog');const view=item.type==='source'?'evidence':'diagram';select(item.type,item.id,item.route,item.line,{view,frame:true,focus:true,extra:{query,scope:searchScope}});};
       box.append(b);
     }

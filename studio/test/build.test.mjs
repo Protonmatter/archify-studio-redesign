@@ -44,13 +44,25 @@ test('candidate connections contribute geometry only, never evidence claims',()=
     const model=exampleAtlas(),r=model.routes[0],contents=model.sources[0].text;fs.writeFileSync(path.join(root,'source.txt'),contents);
     const source={...model.sources[0],raw:'source.txt',href:'source.html',sha256:createHash('sha256').update(contents).digest('hex')};
     const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height],sublabel:'Injected by candidate'})),
-      connections:r.edges.map(e=>({id:e.id,from:e.from,to:e.to,label:e.label,route:'orthogonal-h',transport:{mechanism:'Injected',port:1},detail:'Candidate-only claim',status:'observed'}))};
+      connections:r.edges.map(e=>({id:'candidate-'+e.id,from:e.from,to:e.to,label:e.label,route:'orthogonal-h',transport:{mechanism:'Injected',port:1},detail:'Candidate-only claim',status:'observed'}))};
     fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
     const edges=r.edges.map(({transport,detail,...e})=>e);
     fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify({routes:[{...r,edges,candidate:'candidate.json'}],sources:[source],terms:[]}));
     const importedRoute=importAtlas(root).routes[0],imported=importedRoute.edges[0];
     assert.equal(importedRoute.nodes[0].sublabel,r.nodes[0].sublabel);
-    assert.equal(imported.route,'orthogonal-h');assert.equal(imported.transport,undefined);assert.equal(imported.detail,undefined);assert.equal(imported.status,r.edges[0].status);
+    assert.equal(imported.route,'orthogonal-h');assert.equal(imported.id,r.edges[0].id);assert.equal(imported.transport,undefined);assert.equal(imported.detail,undefined);assert.equal(imported.status,r.edges[0].status);
+  }finally{cleanup(root);}
+});
+test('a missing evidence relationship ID falls back to the candidate ID for older packets',()=>{
+  const root=fs.mkdtempSync(path.join(os.tmpdir(),'studio-ids-'));
+  try{
+    const model=exampleAtlas(),r=model.routes[0],contents=model.sources[0].text;fs.writeFileSync(path.join(root,'source.txt'),contents);
+    const source={...model.sources[0],raw:'source.txt',href:'source.html',sha256:createHash('sha256').update(contents).digest('hex')};
+    const candidate={diagram_type:'architecture',components:r.nodes.map(n=>({id:n.id,pos:[n.x,n.y],size:[n.width,n.height]})),connections:r.edges.map(e=>({id:'candidate-'+e.id,from:e.from,to:e.to,label:e.label}))};
+    fs.writeFileSync(path.join(root,'candidate.json'),JSON.stringify(candidate));
+    const edges=r.edges.map(({id,...e})=>e);
+    fs.writeFileSync(path.join(root,'atlas-data.json'),JSON.stringify({routes:[{...r,edges,candidate:'candidate.json'}],sources:[source],terms:[]}));
+    assert.equal(importAtlas(root).routes[0].edges[0].id,'candidate-'+r.edges[0].id);
   }finally{cleanup(root);}
 });
 test('an external directory link cannot expose files outside an atlas',()=>{
